@@ -31,6 +31,40 @@ function hashToken(token: string): string {
 export const authRepository = {
 
   /**
+   * หา employee + permissions จาก id (ใช้ใน GET /auth/me)
+   * ใช้ raw SQL เพื่อหลีกเลี่ยง naming conflict ระหว่าง column `role` กับ relation `role`
+   * return null ถ้าไม่เจอหรือ is_active = false
+   */
+  async findEmployeeById(id: string): Promise<EmployeeRow & { permissions: string[] } | null> {
+    const rows = await db.execute(sql`
+      SELECT
+        e.id,
+        e.name,
+        e.email,
+        e.role,
+        e.role_id,
+        COALESCE(r.permissions, '[]'::jsonb) AS permissions
+      FROM   employees e
+      LEFT JOIN roles r ON r.id = e.role_id
+      WHERE  e.id        = ${id}
+        AND  e.is_active = true
+      LIMIT  1
+    `);
+
+    if (rows.length === 0) return null;
+
+    const row = rows[0] as Record<string, unknown>;
+    return {
+      id:          row.id          as string,
+      name:        row.name        as string,
+      email:       (row.email ?? "") as string,
+      role:        row.role        as string,
+      roleId:      (row.role_id ?? null) as string | null,
+      permissions: (row.permissions as string[]) ?? [],
+    };
+  },
+
+  /**
    * หา employee ที่ email + is_active ตรง และ password ถูก (pgcrypto)
    * return null ถ้าไม่เจอหรือ password ผิด
    */

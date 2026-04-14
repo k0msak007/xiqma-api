@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { authService } from "@/services/auth.service.ts";
+import { authRepository } from "@/repositories/auth.repository.ts";
 import { authMiddleware } from "@/middleware/auth.ts";
+import { AppError, ErrorCode } from "@/lib/errors.ts";
 import {
   loginSchema,
   refreshSchema,
@@ -58,12 +60,19 @@ authRouter.post("/logout", validate("json", logoutSchema), async (c) => {
 // protected — ดูข้อมูล user ปัจจุบันจาก token
 
 authRouter.get("/me", authMiddleware, async (c) => {
-  const user = c.get("user");
+  const { userId } = c.get("user");
+
+  const employee = await authRepository.findEmployeeById(userId);
+  if (!employee) {
+    throw new AppError(ErrorCode.INVALID_TOKEN, "ไม่พบบัญชีผู้ใช้หรือบัญชีถูกปิดใช้งาน", 401);
+  }
 
   return ok(c, {
-    id: user.userId,
-    role: user.role,
-    permissions: user.permissions,
+    id:          employee.id,
+    name:        employee.name,
+    email:       employee.email,
+    role:        employee.role,
+    permissions: employee.permissions,
   });
 });
 

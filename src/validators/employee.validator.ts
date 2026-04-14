@@ -33,6 +33,12 @@ export const listEmployeesSchema = z.object({
   limit:      z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "กรุณากรอกรหัสผ่านปัจจุบัน"),
+  newPassword:    z.string().min(8, "รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร"),
+});
+
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 export type ListEmployeesInput  = z.infer<typeof listEmployeesSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

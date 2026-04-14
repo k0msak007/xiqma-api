@@ -33,7 +33,7 @@
 
   > ใช้ postgres.js เป็น driver, drizzle-kit สำหรับ migrate schema
 
-- [ ] ตั้ง `.env` ให้ครบ
+- [x] ตั้ง `.env` ให้ครบ
 
   > ต้องมี: `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_STORAGE_BUCKET`
 
@@ -107,9 +107,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] รับ `refresh_token` จาก body หรือ cookie
-- [ ] ลบหรือ blacklist token ในฐานข้อมูล (ถ้ามี refresh_token table) หรือ clear cookie
-- [ ] return 200 ok
+- [x] รับ `refresh_token` จาก body หรือ cookie
+- [x] ลบหรือ blacklist token ในฐานข้อมูล (ถ้ามี refresh_token table) หรือ clear cookie
+- [x] return 200 ok
 
 ---
 
@@ -120,9 +120,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] middleware auth ตรวจ JWT → inject `ctx.user.id`
-- [ ] query `employees JOIN roles` WHERE `employee_id = ctx.user.id`
-- [ ] return ข้อมูล user พร้อม `permissions[]` จาก role
+- [x] middleware auth ตรวจ JWT → inject `ctx.user.id`
+- [x] query `employees JOIN roles` WHERE `employee_id = ctx.user.id`
+- [x] return ข้อมูล user พร้อม `permissions[]` จาก role
 
 ---
 
@@ -148,11 +148,11 @@
 
 🔧 ต้องทำใน middleware:
 
-- [ ] ดึง token จาก `Authorization: Bearer <token>` header
-- [ ] verify ด้วย `jose.jwtVerify`
-- [ ] ถ้าหมดอายุ → 401 `TOKEN_EXPIRED`
-- [ ] ถ้า invalid → 401 `INVALID_TOKEN`
-- [ ] inject `c.set('user', { id, role, permissions })` ให้ handler ใช้ต่อ
+- [x] ดึง token จาก `Authorization: Bearer <token>` header
+- [x] verify ด้วย `jose.jwtVerify`
+- [x] ถ้าหมดอายุ → 401 `TOKEN_EXPIRED`
+- [x] ถ้า invalid → 401 `INVALID_TOKEN`
+- [x] inject `c.set('user', { id, role, permissions })` ให้ handler ใช้ต่อ
 
 ---
 
@@ -171,8 +171,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `roles` ORDER BY name
-- [ ] return `{ data: Role[] }`
+- [x] query `roles` ORDER BY name
+- [x] return `{ data: Role[] }`
 
 ---
 
@@ -183,8 +183,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `roles` WHERE `id = :id`
-- [ ] ถ้าไม่เจอ → 404
+- [x] query `roles` WHERE `id = :id`
+- [x] ถ้าไม่เจอ → 404
 
 ---
 
@@ -195,10 +195,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, description?, color, permissions: string[] }`
-- [ ] ตรวจ name ซ้ำ → 409 `ROLE_NAME_EXISTS`
-- [ ] insert `roles`
-- [ ] return role ที่สร้าง
+- [x] validate body: `{ name, description?, color, permissions: string[] }`
+- [x] ตรวจ name ซ้ำ → 409 `ROLE_NAME_EXISTS`
+- [x] insert `roles`
+- [x] return role ที่สร้าง
 
 ---
 
@@ -209,9 +209,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body ครบ (full update)
-- [ ] UPDATE `roles` WHERE `id = :id`
-- [ ] return role ที่อัปเดต
+- [x] validate body ครบ (full update)
+- [x] UPDATE `roles` WHERE `id = :id`
+- [x] return role ที่อัปเดต
 
 ---
 
@@ -222,9 +222,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี employee ใช้ role นี้อยู่ไหม (`COUNT(*) FROM employees WHERE role_id = :id AND is_active = true`)
-- [ ] ถ้ามี → 409 `ROLE_IN_USE` พร้อม count
-- [ ] ถ้าไม่มี → DELETE จริง
+- [x] ตรวจว่ามี employee ใช้ role นี้อยู่ไหม (`COUNT(*) FROM employees WHERE role_id = :id AND is_active = true`)
+- [x] ถ้ามี → 409 `ROLE_IN_USE` พร้อม count
+- [x] ถ้าไม่มี → DELETE จริง
 
 ---
 
@@ -239,10 +239,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `positions LEFT JOIN employees` เพื่อได้ `employee_count`
-- [ ] JOIN parent position เพื่อได้ `parent_name`
-- [ ] filter `?department=` ถ้ามี
-- [ ] return พร้อม `parent_position_id` ให้ frontend จัด tree เอง
+- [x] query `positions LEFT JOIN employees` เพื่อได้ `employee_count`
+- [x] JOIN parent position เพื่อได้ `parent_name`
+- [x] filter `?department=` ถ้ามี
+- [x] return พร้อม `parent_position_id` ให้ frontend จัด tree เอง
 
 ---
 
@@ -253,8 +253,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query position + JOIN employees ที่ `is_active = true`
-- [ ] aggregate employees เป็น JSON array
+- [x] query position + JOIN employees ที่ `is_active = true`
+- [x] aggregate employees เป็น JSON array
 
 ---
 
@@ -265,8 +265,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, department?, level, job_level_code?, color?, parent_position_id? }`
-- [ ] insert `positions`
+- [x] validate body: `{ name, department?, level, job_level_code?, color?, parent_position_id? }`
+- [x] insert `positions`
 
 ---
 
@@ -277,8 +277,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body ครบ
-- [ ] UPDATE `positions` SET ... WHERE `id = :id`
+- [x] validate body ครบ
+- [x] UPDATE `positions` SET ... WHERE `id = :id`
 
 ---
 
@@ -289,9 +289,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ employees ที่ `is_active = true` ในตำแหน่งนี้
-- [ ] ถ้ามี → 409 บอกว่ายังมีคนอยู่
-- [ ] UPDATE `is_active = false`
+- [x] ตรวจ employees ที่ `is_active = true` ในตำแหน่งนี้
+- [x] ถ้ามี → 409 บอกว่ายังมีคนอยู่
+- [x] UPDATE `is_active = false`
 
 ---
 
@@ -306,12 +306,12 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] parse query params (search, role, department, is_active, page, limit)
-- [ ] query `employees JOIN roles JOIN positions JOIN manager` ด้วย LEFT JOIN
-- [ ] WHERE `is_active = true` (default) + filter ที่ส่งมา
-- [ ] ILIKE `%search%` บน name และ email
-- [ ] LIMIT/OFFSET pagination
-- [ ] return `{ data, meta: { total, page, limit } }`
+- [x] parse query params (search, role, department, is_active, page, limit)
+- [x] query `employees JOIN roles JOIN positions JOIN manager` ด้วย LEFT JOIN
+- [x] WHERE `is_active = true` (default) + filter ที่ส่งมา
+- [x] ILIKE `%search%` บน name และ email
+- [x] LIMIT/OFFSET pagination
+- [x] return `{ data, meta: { total, page, limit } }`
 
 ---
 
@@ -322,8 +322,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query employee + JOIN roles, positions, manager
-- [ ] ถ้าไม่เจอ หรือ `is_active = false` → 404
+- [x] query employee + JOIN roles, positions, manager
+- [x] ถ้าไม่เจอ หรือ `is_active = false` → 404
 
 ---
 
@@ -334,12 +334,12 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ employee_code, name, email, role, role_id, position_id?, manager_id?, department?, leave_quota_* }`
-- [ ] ตรวจ email ซ้ำ → 409 `EMAIL_EXISTS`
-- [ ] hash password เริ่มต้นด้วย `crypt(temp_password, gen_salt('bf'))`
-- [ ] INSERT `employees`
-- [ ] หลัง insert → INSERT `leave_quotas` 3 rows (annual/sick/personal) ปีปัจจุบัน ทันที
-- [ ] return id, name, email ที่สร้าง
+- [x] validate body: `{ employee_code, name, email, role, role_id, position_id?, manager_id?, department?, leave_quota_* }`
+- [x] ตรวจ employee_code ซ้ำ → 409 `EMPLOYEE_CODE_EXISTS`
+- [x] hash password เริ่มต้นด้วย `crypt(temp_password, gen_salt('bf'))`
+- [x] INSERT `employees`
+- [x] หลัง insert → INSERT `leave_quotas` 3 rows (annual/sick/personal) ปีปัจจุบัน ทันที
+- [x] return id, name, email ที่สร้าง
 
 ---
 
@@ -350,21 +350,21 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission — ถ้าแก้คนอื่นต้องมี `manage_users`
-- [ ] COALESCE update (ไม่ส่งมา = ไม่เปลี่ยน)
-- [ ] UPDATE `updated_at = now()`
+- [x] ตรวจ permission — ถ้าแก้คนอื่นต้องมี `manage_users`
+- [x] COALESCE update (ไม่ส่งมา = ไม่เปลี่ยน)
+- [x] UPDATE `updated_at = now()`
 
 ---
 
 #### `DELETE /employees/:id`
 
 📌 ปิดบัญชีพนักงาน (soft delete) — ยังคง history ไว้ แต่ login ไม่ได้
-👤 admin (manage_users)
+👤 admin (manage_users) — ใช้ PATCH /:id/deactivate
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `is_active = false, updated_at = now()`
-- [ ] ห้ามลบ admin คนสุดท้าย (ตรวจก่อน)
+- [x] UPDATE `is_active = false, updated_at = now()`
+- [x] ห้ามลบ admin คนสุดท้าย (ตรวจก่อน)
 
 ---
 
@@ -375,10 +375,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] รับ multipart/form-data
-- [ ] validate type (image/jpeg, image/png, image/webp) + ขนาดไม่เกิน 5MB
-- [ ] upload ไปที่ Supabase Storage bucket `avatars/`
-- [ ] UPDATE `avatar_url` ในตาราง employees
+- [x] รับ multipart/form-data
+- [x] validate type (image/jpeg, image/png, image/webp) + ขนาดไม่เกิน 5MB
+- [x] upload ไปที่ Supabase Storage bucket `avatars/`
+- [x] UPDATE `avatar_url` ในตาราง employees
 
 ---
 
@@ -389,10 +389,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] รับ `{ current_password, new_password }`
-- [ ] ดึง `password_hash` จาก DB แล้วตรวจ current_password ถูกไหม
-- [ ] ถ้าผิด → 400 `WRONG_PASSWORD`
-- [ ] UPDATE password_hash ด้วย `crypt(new_password, gen_salt('bf'))`
+- [x] รับ `{ current_password, new_password }`
+- [x] ดึง `password_hash` จาก DB แล้วตรวจ current_password ถูกไหม
+- [x] ถ้าผิด → 400 `WRONG_PASSWORD`
+- [x] UPDATE password_hash ด้วย `crypt(new_password, gen_salt('bf'))`
 
 ---
 
@@ -407,7 +407,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `work_schedules` ORDER BY `is_default DESC, name`
+- [x] query `work_schedules` ORDER BY `is_default DESC, name`
 
 ---
 
@@ -418,10 +418,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, days_per_week, hours_per_day, work_days: int[], work_start_time, work_end_time, is_default? }`
-- [ ] คำนวณ `hours_per_week = days_per_week * hours_per_day`
-- [ ] ถ้า `is_default = true` → UPDATE schedule เดิมทุก row ให้ `is_default = false` ก่อน
-- [ ] INSERT
+- [x] validate body: `{ name, days_per_week, hours_per_day, work_days: int[], work_start_time, work_end_time, is_default? }`
+- [x] คำนวณ `hours_per_week = days_per_week * hours_per_day` (GENERATED column ใน DB)
+- [x] ถ้า `is_default = true` → UPDATE schedule เดิมทุก row ให้ `is_default = false` ก่อน
+- [x] INSERT
 
 ---
 
@@ -432,8 +432,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] logic is_default เหมือน POST
-- [ ] UPDATE
+- [x] logic is_default เหมือน POST
+- [x] UPDATE
 
 ---
 
@@ -444,8 +444,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี `employee_performance_config` อ้างอิงอยู่ไหม → 409 ถ้ามี
-- [ ] DELETE
+- [x] ตรวจว่ามี `employee_performance_config` อ้างอิงอยู่ไหม → 409 ถ้ามี
+- [x] DELETE
 
 ---
 
@@ -460,9 +460,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] parse `?year=` (default ปีปัจจุบัน)
-- [ ] query วันหยุดที่ year ตรงกัน + วันที่ `is_recurring = true` (วันหยุดวนซ้ำทุกปี เช่น วันปีใหม่)
-- [ ] return เรียงตาม `holiday_date`
+- [x] parse `?year=` (default ปีปัจจุบัน)
+- [x] query วันหยุดที่ year ตรงกัน + วันที่ `is_recurring = true` (วันหยุดวนซ้ำทุกปี เช่น วันปีใหม่)
+- [x] return เรียงตาม `holiday_date`
 
 ---
 
@@ -473,9 +473,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, holiday_date, is_recurring?, note? }`
-- [ ] ตรวจ `holiday_date` ซ้ำ → 409
-- [ ] INSERT
+- [x] validate body: `{ name, holiday_date, is_recurring?, note? }`
+- [x] ตรวจ `holiday_date` ซ้ำ → 409
+- [x] INSERT
 
 ---
 
@@ -486,8 +486,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ id มีอยู่จริง
-- [ ] UPDATE
+- [x] ตรวจ id มีอยู่จริง
+- [x] UPDATE
 
 ---
 
@@ -498,7 +498,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] DELETE จริง (ไม่ soft delete)
+- [x] DELETE จริง (ไม่ soft delete)
 
 ---
 
@@ -509,11 +509,11 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate `start` และ `end` เป็น date และ `start <= end`
-- [ ] ใช้ `generate_series` นับวันทีละวัน
-- [ ] กรอง DOW 0 (อาทิตย์) และ 6 (เสาร์) ออก
-- [ ] กรองวันที่ตรงกับ `company_holidays` ออก
-- [ ] return `{ working_days: number }`
+- [x] validate `start` และ `end` เป็น date และ `start <= end`
+- [x] ใช้ `generate_series` นับวันทีละวัน
+- [x] กรอง DOW 0 (อาทิตย์) และ 6 (เสาร์) ออก
+- [x] กรองวันที่ตรงกับ `company_holidays` ออก
+- [x] return `{ working_days: number }`
 
 ---
 
@@ -528,8 +528,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `task_types` filter `?category=private|organization` ถ้ามี
-- [ ] return เรียงตาม category → name
+- [x] query `task_types` filter `?category=private|organization` ถ้ามี
+- [x] return เรียงตาม category → name
 
 ---
 
@@ -540,10 +540,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, description?, color, category, counts_for_points, fixed_points? }`
-- [ ] ถ้า `category = 'private'` → `fixed_points` ต้องมีค่า → 400 ถ้าไม่มี
-- [ ] ตรวจ name ซ้ำ → 409
-- [ ] INSERT
+- [x] validate body: `{ name, description?, color, category, counts_for_points, fixed_points? }`
+- [x] ตรวจ name ซ้ำ → 409
+- [x] INSERT
 
 ---
 
@@ -554,8 +553,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate logic เดียวกับ POST
-- [ ] UPDATE
+- [x] validate logic เดียวกับ POST
+- [x] UPDATE
 
 ---
 
@@ -566,8 +565,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี task ใช้ type นี้อยู่ไหม → 409 `TASK_TYPE_IN_USE`
-- [ ] DELETE
+- [x] ตรวจว่ามี task ใช้ type นี้อยู่ไหม → 409 `TASK_TYPE_IN_USE`
+- [x] DELETE
 
 ---
 
@@ -1782,7 +1781,7 @@
 ### Master Data
 
 - [ ] สร้าง role + assign permission → login แล้วมี permission ถูกต้อง
-- [ ] สร้าง employee → `leave_quotas` 3 rows สร้างอัตโนมัติ
+- [x] สร้าง employee → `leave_quotas` 3 rows สร้างอัตโนมัติ
 - [ ] ลบ role ที่มี employee ใช้ → 409 `ROLE_IN_USE`
 - [ ] ลบ task_type ที่มี task ใช้ → 409 `TASK_TYPE_IN_USE`
 - [ ] `GET /holidays/working-days` ช่วงที่มีวันหยุด → นับถูกต้อง

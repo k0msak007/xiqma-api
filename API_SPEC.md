@@ -3,7 +3,7 @@
 **Base URL:** `http://localhost:3000/api`
 **Content-Type:** `application/json`
 
-> อัปเดตล่าสุด: 2026-04-09
+> อัปเดตล่าสุด: 2026-04-14
 > สถานะ: ✅ พร้อมใช้ | 🚧 กำลังพัฒนา | 📋 วางแผน
 
 ---
@@ -287,7 +287,7 @@ X-RateLimit-Reset: 1712636400
 
 > ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
 
-## GET /employees 📋
+## GET /employees ✅
 
 ดูรายชื่อพนักงาน
 
@@ -331,7 +331,7 @@ X-RateLimit-Reset: 1712636400
 
 ---
 
-## GET /employees/:id 📋
+## GET /employees/:id ✅
 
 ดูข้อมูลพนักงานรายคน
 
@@ -375,7 +375,7 @@ X-RateLimit-Reset: 1712636400
 
 ---
 
-## POST /employees 📋
+## POST /employees ✅
 
 สร้างพนักงานใหม่
 
@@ -433,7 +433,7 @@ X-RateLimit-Reset: 1712636400
 
 ---
 
-## PUT /employees/:id 📋
+## PUT /employees/:id ✅
 
 แก้ไขข้อมูลพนักงาน
 
@@ -465,6 +465,29 @@ X-RateLimit-Reset: 1712636400
   "success": true,
   "message": "อัปเดตข้อมูลสำเร็จ",
   "data": { "id": "...", ... }
+}
+```
+
+---
+
+## PATCH /employees/:id/deactivate ✅
+
+ปิดการใช้งานพนักงาน (soft delete)
+
+**Auth required:** ✅
+**Permission:** `manage_employees`
+
+### Path Parameters
+| Param | Type | หมายเหตุ |
+|---|---|---|
+| `id` | UUID | employee id |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ปิดการใช้งานพนักงานสำเร็จ",
+  "data": { "id": "...", "isActive": false, ... }
 }
 ```
 
@@ -718,6 +741,794 @@ X-RateLimit-Reset: 1712636400
 
 ## Story Points
 ค่าที่ valid เท่านั้น: `1`, `2`, `3`, `5`, `8`, `13`, `21`
+
+---
+
+---
+
+# Roles ✅
+
+> ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
+
+## GET /roles ✅
+
+ดู roles ทั้งหมด
+
+**Auth required:** ✅
+**Permission:** `manage_roles` (admin)
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูล roles สำเร็จ",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "admin",
+      "description": "ผู้ดูแลระบบ",
+      "color": "#FF5722",
+      "permissions": ["manage_users", "manage_roles", "manage_tasks", "view_reports"]
+    }
+  ]
+}
+```
+
+---
+
+## GET /roles/:id ✅
+
+ดู role เดียว
+
+**Auth required:** ✅
+**Permission:** `manage_roles`
+
+### Path Parameters
+| Param | Type | หมายเหตุ |
+|---|---|---|
+| `id` | UUID | role id |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูล role สำเร็จ",
+  "data": { "id": "...", "name": "admin", ... }
+}
+```
+
+---
+
+## POST /roles ✅
+
+สร้าง role ใหม่
+
+**Auth required:** ✅
+**Permission:** `manage_roles`
+
+### Request Body
+```json
+{
+  "name": "developer",
+  "description": "นักพัฒนา",
+  "color": "#2196F3",
+  "permissions": ["manage_tasks", "view_reports"]
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `name` | string | ✅ | ต้องไม่ซ้ำ |
+| `description` | string | — | |
+| `color` | string | ✅ | hex color |
+| `permissions` | string[] | ✅ | array ของ permission names |
+
+### Response 201
+```json
+{
+  "success": true,
+  "message": "สร้าง role สำเร็จ",
+  "data": { "id": "...", "name": "developer", ... }
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `ROLE_NAME_EXISTS` | 409 | ชื่อซ้ำ |
+
+---
+
+## PUT /roles/:id ✅
+
+แก้ไข role
+
+**Auth required:** ✅
+**Permission:** `manage_roles`
+
+### Request Body
+```json
+{
+  "name": "developer",
+  "color": "#4CAF50"
+}
+```
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "แก้ไข role สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## DELETE /roles/:id ✅
+
+ลบ role
+
+**Auth required:** ✅
+**Permission:** `manage_roles`
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ลบ role สำเร็จ",
+  "data": null
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `ROLE_IN_USE` | 409 | มีพนักงานใช้ role นี้ |
+
+---
+
+---
+
+# Positions ✅
+
+> ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
+
+## GET /positions ✅
+
+ดูตำแหน่งทั้งหมด
+
+**Auth required:** ✅
+**Permission:** `manage_workspace` (admin)
+
+### Query Parameters
+| Param | Type | Default | หมายเหตุ |
+|---|---|---|---|
+| `department` | string | — | filter ตาม department |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูลตำแหน่งสำเร็จ",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Software Engineer",
+      "department": "Engineering",
+      "level": 1,
+      "jobLevelCode": "SE",
+      "color": "#2196F3",
+      "parentPositionId": "uuid"
+    }
+  ]
+}
+```
+
+---
+
+## GET /positions/:id ✅
+
+ดูตำแหน่งเดียว
+
+**Auth required:** ✅
+
+### Path Parameters
+| Param | Type | หมายเหตุ |
+|---|---|---|
+| `id` | UUID | position id |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูลตำแหน่งสำเร็จ",
+  "data": { "id": "...", "name": "Software Engineer", ... }
+}
+```
+
+---
+
+## POST /positions ✅
+
+สร้างตำแหน่งใหม่
+
+**Auth required:** ✅
+**Permission:** `manage_workspace`
+
+### Request Body
+```json
+{
+  "name": "Senior Developer",
+  "department": "Engineering",
+  "level": 2,
+  "jobLevelCode": "SE2",
+  "color": "#4CAF50",
+  "parentPositionId": "uuid"
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `name` | string | ✅ | |
+| `department` | string | — | |
+| `level` | number | ✅ | |
+| `jobLevelCode` | string | — | |
+| `color` | string | ✅ | hex color |
+| `parentPositionId` | UUID | — | |
+
+### Response 201
+```json
+{
+  "success": true,
+  "message": "สร้างตำแหน่งสำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## PUT /positions/:id ✅
+
+แก้ไขตำแหน่ง
+
+**Auth required:** ✅
+**Permission:** `manage_workspace`
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "แก้ไขตำแหน่งสำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## DELETE /positions/:id ✅
+
+ลบตำแหน่ง (soft delete)
+
+**Auth required:** ✅
+**Permission:** `manage_workspace`
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ลบตำแหน่งสำเร็จ",
+  "data": null
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `POSITION_IN_USE` | 409 | มีพนักงานอยู่ในตำแหน่งนี้ |
+
+---
+
+---
+
+# Work Schedules ✅
+
+> ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
+
+## GET /work-schedules ✅
+
+ดูตารางเวลาทำงานทั้งหมด
+
+**Auth required:** ✅
+**Permission:** `manage_workspace` (admin)
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูล work schedules สำเร็จ",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Full-time",
+      "daysPerWeek": 5,
+      "hoursPerDay": 8,
+      "hoursPerWeek": 40,
+      "workDays": [1, 2, 3, 4, 5],
+      "workStartTime": "09:00",
+      "workEndTime": "18:00",
+      "isDefault": true
+    }
+  ]
+}
+```
+
+---
+
+## GET /work-schedules/:id ✅
+
+ดูตารางเวลาเดียว
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูล work schedule สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## POST /work-schedules ✅
+
+สร้างตารางเวลาใหม่
+
+**Auth required:** ✅
+
+### Request Body
+```json
+{
+  "name": "Part-time",
+  "daysPerWeek": 3,
+  "hoursPerDay": 4,
+  "workDays": [1, 3, 5],
+  "workStartTime": "09:00",
+  "workEndTime": "13:00",
+  "isDefault": false
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `name` | string | ✅ | |
+| `daysPerWeek` | number | ✅ | |
+| `hoursPerDay` | number | ✅ | |
+| `workDays` | number[] | ✅ | array of 0-6 (0=อาทิตย์) |
+| `workStartTime` | string | ✅ | HH:mm |
+| `workEndTime` | string | ✅ | HH:mm |
+| `isDefault` | boolean | — | default false |
+
+### Response 201
+```json
+{
+  "success": true,
+  "message": "สร้าง work schedule สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## PUT /work-schedules/:id ✅
+
+แก้ไขตารางเวลา
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "แก้ไข work schedule สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## DELETE /work-schedules/:id ✅
+
+ลบตารางเวลา
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ลบ work schedule สำเร็จ",
+  "data": null
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `WORK_SCHEDULE_IN_USE` | 409 | มีพนักงานใช้ schedule นี้ |
+
+---
+
+---
+
+# Holidays ✅
+
+> ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
+
+## GET /holidays ✅
+
+ดูวันหยุดทั้งหมด
+
+**Auth required:** ✅
+
+### Query Parameters
+| Param | Type | Default | หมายเหตุ |
+|---|---|---|---|
+| `year` | number | — | filter ตามปี |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูลวันหยุดสำเร็จ",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "วันปีใหม่",
+      "holidayDate": "2026-01-01",
+      "isRecurring": true,
+      "note": null
+    }
+  ]
+}
+```
+
+---
+
+## GET /holidays/:id ✅
+
+ดูวันหยุดเดียว
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูลวันหยุดสำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## GET /holidays/working-days ✅
+
+นับวันทำงานจริงในช่วง (ใช้คำนวณวันลา)
+
+**Auth required:** ✅
+
+### Query Parameters
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `start` | string | ✅ | YYYY-MM-DD |
+| `end` | string | ✅ | YYYY-MM-DD |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "นับวันทำงานสำเร็จ",
+  "data": {
+    "workingDays": 20
+  }
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | start > end |
+
+---
+
+## POST /holidays ✅
+
+สร้างวันหยุดใหม่
+
+**Auth required:** ✅
+
+### Request Body
+```json
+{
+  "name": "วันสตาร์ท",
+  "holidayDate": "2026-01-02",
+  "isRecurring": false,
+  "note": "ตั้งขึ้นเอง"
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `name` | string | ✅ | |
+| `holidayDate` | string | ✅ | YYYY-MM-DD |
+| `isRecurring` | boolean | — | default false |
+| `note` | string | — | |
+
+### Response 201
+```json
+{
+  "success": true,
+  "message": "สร้างวันหยุดสำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `HOLIDAY_DATE_EXISTS` | 409 | วันที่ซ้ำ |
+
+---
+
+## PUT /holidays/:id ✅
+
+แก้ไขวันหยุด
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "แก้ไขวันหยุดสำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## DELETE /holidays/:id ✅
+
+ลบวันหยุด
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ลบวันหยุดสำเร็จ",
+  "data": null
+}
+```
+
+---
+
+---
+
+# Task Types ✅
+
+> ทุก endpoint ใน group นี้ต้องการ `Authorization: Bearer <token>`
+
+## GET /task-types ✅
+
+ดูประเภท task ทั้งหมด
+
+**Auth required:** ✅
+
+### Query Parameters
+| Param | Type | Default | หมายเหตุ |
+|---|---|---|---|
+| `category` | string | — | `private` \| `organization` |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ดึงข้อมูล task types สำเร็จ",
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Bug Fix",
+      "description": "แก้บ",
+      "color": "#F44336",
+      "category": "organization",
+      "countsForPoints": true,
+      "fixedPoints": null
+    }
+  ]
+}
+```
+
+---
+
+## GET /task-types/:id ✅
+
+ดู task type เดียว
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "���ึงข้อมูล task type สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## POST /task-types ✅
+
+สร้าง task type ใหม่
+
+**Auth required:** ✅
+
+### Request Body
+```json
+{
+  "name": "Meeting",
+  "description": "ประชุม",
+  "color": "#9C27B0",
+  "category": "organization",
+  "countsForPoints": true
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `name` | string | ✅ | |
+| `description` | string | — | |
+| `color` | string | ✅ | hex color |
+| `category` | string | ✅ | `private` หรือ `organization` |
+| `countsForPoints` | boolean | ✅ | |
+| `fixedPoints` | number | — | required if category=`private` |
+
+### Response 201
+```json
+{
+  "success": true,
+  "message": "สร้าง task type สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | category=`private` แต่ไม่มี fixedPoints |
+
+---
+
+## PUT /task-types/:id ✅
+
+แก้ไข task type
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "แก้ไข task type สำเร็จ",
+  "data": { "id": "...", ... }
+}
+```
+
+---
+
+## DELETE /task-types/:id ✅
+
+ลบ task type
+
+**Auth required:** ✅
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "ลบ task type สำเร็จ",
+  "data": null
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `TASK_TYPE_IN_USE` | 409 | มี task ใช้ type นี้ |
+
+---
+
+---
+
+# Employees ✅ (Update)
+
+เพิ่ม endpoints สำหรับ avatar และ password:
+
+## PATCH /employees/:id/avatar ✅
+
+อัปโหลดรูปโปรไฟล์
+
+**Auth required:** ✅
+
+### Content-Type: `multipart/form-data`
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `file` | File | ✅ | JPEG, PNG, WebP, max 5MB |
+
+### Path Parameters
+| Param | Type | หมายเหตุ |
+|---|---|---|
+| `id` | UUID | employee id |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "อัปโหลดรูปโปรไฟล์สำเร็จ",
+  "data": {
+    "id": "...",
+    "avatarUrl": "https://..."
+  }
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `FORBIDDEN` | 403 | ไม่มีสิทธิ์แก้ไขรูปโปรไฟล์ของผู้อื่น |
+| `VALIDATION_ERROR` | 400 | ไฟล์ไม่ถูกต้อง หรือเกิน 5MB |
+
+---
+
+## PUT /employees/me/password ✅
+
+เปลี่ยนรหัสผ่านของตัวเอง
+
+**Auth required:** ✅
+
+### Request Body
+```json
+{
+  "currentPassword": "password123",
+  "newPassword": "newPassword456"
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `currentPassword` | string | ✅ | |
+| `newPassword` | string | ✅ | อย่างน้อย 8 ตัวอักษร |
+
+### Response 200
+```json
+{
+  "success": true,
+  "message": "เปลี่ยนรหัสผ่านสำเร็จ",
+  "data": null
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `WRONG_PASSWORD` | 400 | currentPassword ผิด |
+| `VALIDATION_ERROR` | 400 | newPassword < 8 ตัว |
 
 ---
 
