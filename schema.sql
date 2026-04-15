@@ -1,7 +1,7 @@
 -- ============================================================
 -- UNIFIED SYSTEM — Full Schema SQL
 -- Stack: PostgreSQL (Supabase)
--- Version: 1.1 — fixes applied from DBML review
+-- Version: 1.2 — Phase 3 soft-delete support
 --
 -- Changes from v1.0:
 --   [FIX-1] employees          + password_hash (auth ต้องใช้)
@@ -9,6 +9,8 @@
 --   [FIX-3] notification_logs  + is_read, read_at (mark read API)
 --   [FIX-4] leave_requests     total_days = plain integer (ไม่ใช่ generated)
 --   [FIX-5] refresh_tokens     ตารางใหม่ (revoke JWT ได้จริง)
+-- Changes from v1.1:
+--   [FIX-6] tasks              + deleted_at (soft-delete cascade จาก list/folder/space delete)
 --   [ADD]   indexes เพิ่มเติม + index บน notification_logs, attendance
 -- ============================================================
 
@@ -311,7 +313,9 @@ CREATE TABLE tasks (
   tags           JSONB       NOT NULL DEFAULT '[]',
 
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- NULL = active, มีค่า = ถูกลบ (cascade จาก list/folder/space delete)
+  deleted_at     TIMESTAMPTZ
 );
 
 CREATE TABLE subtasks (
@@ -647,6 +651,7 @@ INSERT INTO employees (
 -- ============================================================
 -- รัน script นี้เฉพาะถ้า DB เดิมมีอยู่แล้ว:
 --
+-- v1.0 → v1.1
 -- ALTER TABLE employees
 --   ADD COLUMN IF NOT EXISTS password_hash text;
 --
@@ -672,3 +677,7 @@ INSERT INTO employees (
 --   ON notification_logs(employee_id, is_read, created_at DESC);
 -- CREATE INDEX IF NOT EXISTS idx_time_sessions_active
 --   ON task_time_sessions(employee_id, ended_at) WHERE ended_at IS NULL;
+--
+-- v1.1 → v1.2
+-- ALTER TABLE tasks
+--   ADD COLUMN IF NOT EXISTS deleted_at timestamptz;

@@ -585,9 +585,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `spaces LEFT JOIN space_members LEFT JOIN lists` นับ member_count + list_count
-- [ ] WHERE `space_members.employee_id = ctx.user.id` (ถ้าไม่ใช่ admin)
-- [ ] ORDER BY `display_order`
+- [x] query `spaces LEFT JOIN space_members LEFT JOIN lists` นับ member_count + list_count
+- [x] WHERE `space_members.employee_id = ctx.user.id` (ถ้าไม่ใช่ admin)
+- [x] ORDER BY `display_order`
 
 ---
 
@@ -598,8 +598,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ user เป็น member หรือ admin → 403 ถ้าไม่ใช่
-- [ ] query space + aggregate members เป็น JSON array
+- [x] ตรวจ user เป็น member หรือ admin → 403 ถ้าไม่ใช่
+- [x] query space + aggregate members เป็น JSON array
 
 ---
 
@@ -610,10 +610,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, color, icon?, member_ids?: string[] }`
-- [ ] INSERT `spaces` พร้อมคำนวณ `display_order = MAX + 1`
-- [ ] INSERT `space_members` สำหรับ creator + member_ids ที่ส่งมา (ON CONFLICT DO NOTHING)
-- [ ] return space ที่สร้าง
+- [x] validate body: `{ name, color, icon?, member_ids?: string[] }`
+- [x] INSERT `spaces` พร้อมคำนวณ `display_order = MAX + 1`
+- [x] INSERT `space_members` สำหรับ creator + member_ids ที่ส่งมา (ON CONFLICT DO NOTHING)
+- [x] return space ที่สร้าง
 
 ---
 
@@ -624,8 +624,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body
-- [ ] COALESCE update
+- [x] validate body
+- [x] COALESCE update
 
 ---
 
@@ -636,8 +636,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ folders/lists ที่ `is_archived = false` ข้างใน → 409 ถ้ายังมี
-- [ ] ลบ `space_members` ก่อน แล้วค่อย soft delete children
+- [x] ตรวจ folders/lists ที่ `is_archived = false` ข้างใน → 409 ถ้ายังมี
+- [x] ลบ `space_members` ก่อน แล้วค่อย soft delete children
 
 ---
 
@@ -648,9 +648,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ employee_ids: string[] }`
-- [ ] ตรวจว่า employee_ids ทุกคนมีอยู่จริงและ `is_active = true`
-- [ ] INSERT `space_members` batch (ON CONFLICT DO NOTHING)
+- [x] validate body: `{ employee_ids: string[] }`
+- [x] ตรวจว่า employee_ids ทุกคนมีอยู่จริงและ `is_active = true`
+- [x] INSERT `space_members` batch (ON CONFLICT DO NOTHING)
 
 ---
 
@@ -661,8 +661,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่า space_id + employee_id มีอยู่
-- [ ] DELETE จาก `space_members`
+- [x] ตรวจว่า space_id + employee_id มีอยู่
+- [x] DELETE จาก `space_members`
 
 ---
 
@@ -677,10 +677,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] require `?space_id=`
-- [ ] query `folders LEFT JOIN lists` นับ list_count
-- [ ] filter `is_archived = false` โดย default, เปิดด้วย `?include_archived=true`
-- [ ] ORDER BY `is_archived ASC, display_order`
+- [x] require `?space_id=`
+- [x] query `folders LEFT JOIN lists` นับ list_count
+- [x] filter `is_archived = false` โดย default, เปิดด้วย `?include_archived=true`
+- [x] ORDER BY `is_archived ASC, display_order`
 
 ---
 
@@ -691,9 +691,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, space_id, color? }`
-- [ ] ตรวจว่า space_id มีอยู่จริงและ user เป็น member
-- [ ] INSERT พร้อม `display_order = MAX + 1` ใน space นั้น
+- [x] validate body: `{ name, space_id, color? }`
+- [x] ตรวจว่า space_id มีอยู่จริงและ user เป็น member
+- [x] INSERT พร้อม `display_order = MAX + 1` ใน space นั้น
 
 ---
 
@@ -704,8 +704,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name?, color?, display_order? }`
-- [ ] COALESCE update
+- [x] validate body: `{ name?, color?, display_order? }`
+- [x] COALESCE update
 
 ---
 
@@ -716,7 +716,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `is_archived = true, archived_at = now()`
+- [x] UPDATE `is_archived = true, archived_at = now()`
 
 ---
 
@@ -727,7 +727,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `is_archived = false, archived_at = NULL`
+- [x] UPDATE `is_archived = false, archived_at = NULL`
 
 ---
 
@@ -738,9 +738,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ `is_archived = true` ก่อน → 400 ถ้ายังไม่ archive
-- [ ] soft delete lists ข้างใน + tasks ใน lists นั้นด้วย
-- [ ] DELETE folder
+- [x] ตรวจ `is_archived = true` ก่อน → 400 ถ้ายังไม่ archive
+- [x] soft delete lists ข้างใน + tasks ใน lists นั้นด้วย
+- [x] DELETE folder
 
 ---
 
@@ -755,10 +755,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] require `?space_id=`
-- [ ] query `lists LEFT JOIN tasks LEFT JOIN list_statuses`
-- [ ] aggregate statuses เป็น JSON array เรียงตาม `display_order`
-- [ ] นับ `task_count` + `done_count`
+- [x] require `?space_id=`
+- [x] query `lists LEFT JOIN tasks LEFT JOIN list_statuses`
+- [x] aggregate statuses เป็น JSON array เรียงตาม `display_order`
+- [x] นับ `task_count` + `done_count`
 
 ---
 
@@ -769,9 +769,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, space_id, folder_id?, color? }`
-- [ ] INSERT `lists`
-- [ ] หลัง insert → INSERT `list_statuses` default 5 รายการทันที:
+- [x] validate body: `{ name, space_id, folder_id?, color? }`
+- [x] INSERT `lists`
+- [x] หลัง insert → INSERT `list_statuses` default 5 รายการทันที:
   ```
   Open (gray) → In Progress (blue) → Review (amber) → Done (green) → Closed (purple)
   ```
@@ -785,7 +785,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] COALESCE update
+- [x] COALESCE update
 
 ---
 
@@ -796,9 +796,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี task ที่ยังไม่ completed/cancelled อยู่ → แจ้งเตือน
-- [ ] soft delete tasks ทั้งหมดใน list ก่อน
-- [ ] DELETE list
+- [x] ตรวจว่ามี task ที่ยังไม่ completed/cancelled อยู่ → แจ้งเตือน
+- [x] soft delete tasks ทั้งหมดใน list ก่อน
+- [x] DELETE list
 
 ---
 
@@ -809,7 +809,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `list_statuses` WHERE `list_id = :id` ORDER BY `display_order`
+- [x] query `list_statuses` WHERE `list_id = :id` ORDER BY `display_order`
 
 ---
 
@@ -820,9 +820,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ name, color, type }`
-- [ ] `display_order = MAX + 1`
-- [ ] INSERT
+- [x] validate body: `{ name, color, type }`
+- [x] `display_order = MAX + 1`
+- [x] INSERT
 
 ---
 
@@ -833,8 +833,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate ว่า status_id อยู่ใน list_id นี้จริง
-- [ ] UPDATE
+- [x] validate ว่า status_id อยู่ใน list_id นี้จริง
+- [x] UPDATE
 
 ---
 
@@ -845,8 +845,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] COUNT tasks ที่ใช้ status นี้ → 409 `STATUS_IN_USE` ถ้ามี
-- [ ] DELETE
+- [x] COUNT tasks ที่ใช้ status นี้ → 409 `STATUS_IN_USE` ถ้ามี
+- [x] DELETE
 
 ---
 
@@ -857,9 +857,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ ordered_ids: string[] }` — array ของ status_id ตามลำดับใหม่
-- [ ] ตรวจว่าทุก id อยู่ใน list นี้จริง
-- [ ] loop UPDATE `display_order = index` ทุก row ใน **transaction เดียว**
+- [x] validate body: `{ ordered_ids: string[] }` — array ของ status_id ตามลำดับใหม่
+- [x] ตรวจว่าทุก id อยู่ใน list นี้จริง
+- [x] loop UPDATE `display_order = index` ทุก row ใน **transaction เดียว**
 
 ---
 

@@ -14,6 +14,11 @@ import { positionsRouter } from "@/routes/positions.route.ts";
 import { workSchedulesRouter } from "@/routes/work-schedules.route.ts";
 import { holidaysRouter } from "@/routes/holidays.route.ts";
 import { taskTypesRouter } from "@/routes/task-types.route.ts";
+import { spacesRouter }  from "@/routes/spaces.route.ts";
+import { foldersRouter } from "@/routes/folders.route.ts";
+import { listsRouter }             from "@/routes/lists.route.ts";
+import { extensionRequestsRouter } from "@/routes/extension-requests.route.ts";
+import { searchRouter }            from "@/routes/search.route.ts";
 
 export const app = new Hono()
 
@@ -48,6 +53,11 @@ export const app = new Hono()
   .route("/api/work-schedules", workSchedulesRouter)
   .route("/api/holidays", holidaysRouter)
   .route("/api/task-types", taskTypesRouter)
+  .route("/api/spaces",  spacesRouter)
+  .route("/api/folders", foldersRouter)
+  .route("/api/lists",              listsRouter)
+  .route("/api/extension-requests", extensionRequestsRouter)
+  .route("/api/search",             searchRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

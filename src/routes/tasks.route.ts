@@ -1,4 +1,286 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { authMiddleware } from "@/middleware/auth.ts";
+import { validate } from "@/lib/validate.ts";
+import { taskService } from "@/services/task.service.ts";
+import { ok, created } from "@/lib/response.ts";
+import {
+  taskQuerySchema,
+  myTasksQuerySchema,
+  calendarQuerySchema,
+  createTaskSchema,
+  updateTaskSchema,
+  updateTaskStatusSchema,
+  reorderTasksSchema,
+  createSubtaskSchema,
+  updateSubtaskSchema,
+  createCommentSchema,
+  updateCommentSchema,
+  createExtensionRequestSchema,
+} from "@/validators/task.validator.ts";
 
-export const tasksRouter = new Hono().use(authMiddleware);
+const idParamSchema         = z.object({ id: z.string().uuid() });
+const subtaskParamSchema    = z.object({ id: z.string().uuid(), subtaskId: z.string().uuid() });
+const commentParamSchema    = z.object({ id: z.string().uuid(), commentId: z.string().uuid() });
+const attachmentParamSchema = z.object({ id: z.string().uuid(), attachmentId: z.string().uuid() });
+
+export const tasksRouter = new Hono()
+  .use(authMiddleware)
+
+  // ── Static-path routes must come BEFORE /:id ─────────────────────────────────
+
+  // GET /tasks/my
+  .get("/my", validate("query", myTasksQuerySchema), async (c) => {
+    const { range } = c.req.valid("query");
+    const user      = c.get("user");
+    const tasks     = await taskService.myTasks(user.userId, range);
+    return ok(c, tasks, "ดึงข้อมูล task ของคุณสำเร็จ");
+  })
+
+  // GET /tasks/calendar
+  .get("/calendar", validate("query", calendarQuerySchema), async (c) => {
+    const { start, end } = c.req.valid("query");
+    const user           = c.get("user");
+    const tasks          = await taskService.calendarTasks(user.userId, user.role, start, end);
+    return ok(c, tasks, "ดึงข้อมูล calendar สำเร็จ");
+  })
+
+  // PUT /tasks/reorder
+  .put("/reorder", validate("json", reorderTasksSchema), async (c) => {
+    const data = c.req.valid("json");
+    const user = c.get("user");
+    await taskService.reorderTasks(data);
+    return ok(c, null, "เรียงลำดับ task สำเร็จ");
+  })
+
+  // ── Task CRUD ─────────────────────────────────────────────────────────────────
+
+  // GET /tasks?listId=&statusId=&assigneeId=&priority=&search=&page=&limit=&sort=
+  .get("/", validate("query", taskQuerySchema), async (c) => {
+    const query = c.req.valid("query");
+    const user  = c.get("user");
+    const result = await taskService.listTasks(
+      {
+        listId:     query.listId,
+        statusId:   query.statusId ?? undefined,
+        assigneeId: query.assigneeId ?? undefined,
+        priority:   query.priority ? String(query.priority) : undefined,
+        search:     query.search ?? undefined,
+        page:       query.page ?? 1,
+        limit:      query.limit ?? 20,
+        sort:       String(query.sort ?? "display_order"),
+      },
+      user.userId,
+      user.role,
+    );
+    const page  = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    return ok(c, result.data, "ดึงข้อมูล task สำเร็จ", {
+      page,
+      limit,
+      total:      result.total,
+      totalPages: Math.ceil(result.total / limit),
+    });
+  })
+
+  // POST /tasks
+  .post("/", validate("json", createTaskSchema), async (c) => {
+    const data = c.req.valid("json");
+    const user = c.get("user");
+    const task = await taskService.createTask(data, user.userId, user.role);
+    return created(c, task, "สร้าง task สำเร็จ");
+  })
+
+  // GET /tasks/:id
+  .get("/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const user   = c.get("user");
+    const task   = await taskService.getTask(id, user.userId, user.role);
+    return ok(c, task, "ดึงข้อมูล task สำเร็จ");
+  })
+
+  // PUT /tasks/:id
+  .put("/:id", validate("param", idParamSchema), validate("json", updateTaskSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const data   = c.req.valid("json");
+    const task   = await taskService.updateTask(id, data);
+    return ok(c, task, "แก้ไข task สำเร็จ");
+  })
+
+  // PATCH /tasks/:id/status
+  .patch("/:id/status", validate("param", idParamSchema), validate("json", updateTaskStatusSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const data   = c.req.valid("json");
+    const task   = await taskService.updateTaskStatus(id, data);
+    return ok(c, task, "อัปเดต status สำเร็จ");
+  })
+
+  // DELETE /tasks/:id
+  .delete("/:id", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    await taskService.deleteTask(id);
+    return ok(c, null, "ลบ task สำเร็จ");
+  })
+
+  // ── Subtasks ──────────────────────────────────────────────────────────────────
+
+  // GET /tasks/:id/subtasks
+  .get("/:id/subtasks", validate("param", idParamSchema), async (c) => {
+    const { id }    = c.req.valid("param");
+    const subtasks  = await taskService.listSubtasks(id);
+    return ok(c, subtasks, "ดึงข้อมูล subtask สำเร็จ");
+  })
+
+  // POST /tasks/:id/subtasks
+  .post("/:id/subtasks", validate("param", idParamSchema), validate("json", createSubtaskSchema), async (c) => {
+    const { id }   = c.req.valid("param");
+    const data     = c.req.valid("json");
+    const subtask  = await taskService.createSubtask(id, data);
+    return created(c, subtask, "สร้าง subtask สำเร็จ");
+  })
+
+  // PUT /tasks/:id/subtasks/:subtaskId
+  .put("/:id/subtasks/:subtaskId", validate("param", subtaskParamSchema), validate("json", updateSubtaskSchema), async (c) => {
+    const { id, subtaskId } = c.req.valid("param");
+    const data              = c.req.valid("json");
+    const subtask           = await taskService.updateSubtask(id, subtaskId, data);
+    return ok(c, subtask, "แก้ไข subtask สำเร็จ");
+  })
+
+  // PATCH /tasks/:id/subtasks/:subtaskId/toggle
+  .patch("/:id/subtasks/:subtaskId/toggle", validate("param", subtaskParamSchema), async (c) => {
+    const { id, subtaskId } = c.req.valid("param");
+    const subtask           = await taskService.toggleSubtask(id, subtaskId);
+    return ok(c, subtask, "toggle subtask สำเร็จ");
+  })
+
+  // DELETE /tasks/:id/subtasks/:subtaskId
+  .delete("/:id/subtasks/:subtaskId", validate("param", subtaskParamSchema), async (c) => {
+    const { id, subtaskId } = c.req.valid("param");
+    await taskService.deleteSubtask(id, subtaskId);
+    return ok(c, null, "ลบ subtask สำเร็จ");
+  })
+
+  // ── Comments ──────────────────────────────────────────────────────────────────
+
+  // GET /tasks/:id/comments
+  .get("/:id/comments", validate("param", idParamSchema), async (c) => {
+    const { id }    = c.req.valid("param");
+    const comments  = await taskService.listComments(id);
+    return ok(c, comments, "ดึงข้อมูล comment สำเร็จ");
+  })
+
+  // POST /tasks/:id/comments
+  .post("/:id/comments", validate("param", idParamSchema), validate("json", createCommentSchema), async (c) => {
+    const { id }   = c.req.valid("param");
+    const data     = c.req.valid("json");
+    const user     = c.get("user");
+    const comment  = await taskService.createComment(id, user.userId, data);
+    return created(c, comment, "สร้าง comment สำเร็จ");
+  })
+
+  // PUT /tasks/:id/comments/:commentId
+  .put("/:id/comments/:commentId", validate("param", commentParamSchema), validate("json", updateCommentSchema), async (c) => {
+    const { id, commentId } = c.req.valid("param");
+    const data              = c.req.valid("json");
+    const user              = c.get("user");
+    const comment           = await taskService.updateComment(id, commentId, user.userId, data);
+    return ok(c, comment, "แก้ไข comment สำเร็จ");
+  })
+
+  // DELETE /tasks/:id/comments/:commentId
+  .delete("/:id/comments/:commentId", validate("param", commentParamSchema), async (c) => {
+    const { id, commentId } = c.req.valid("param");
+    const user              = c.get("user");
+    await taskService.deleteComment(id, commentId, user.userId, user.role);
+    return ok(c, null, "ลบ comment สำเร็จ");
+  })
+
+  // ── Attachments ───────────────────────────────────────────────────────────────
+
+  // GET /tasks/:id/attachments
+  .get("/:id/attachments", validate("param", idParamSchema), async (c) => {
+    const { id }      = c.req.valid("param");
+    const attachments = await taskService.listAttachments(id);
+    return ok(c, attachments, "ดึงข้อมูล attachment สำเร็จ");
+  })
+
+  // POST /tasks/:id/attachments (multipart/form-data)
+  .post("/:id/attachments", validate("param", idParamSchema), async (c) => {
+    const { id }   = c.req.valid("param");
+    const user     = c.get("user");
+    const body     = await c.req.parseBody();
+    const file     = body["file"];
+
+    if (!file || !(file instanceof File)) {
+      return c.json({ success: false, message: "กรุณาส่งไฟล์", error: "VALIDATION_ERROR" }, 400);
+    }
+
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const attachment = await taskService.uploadAttachment(id, user.userId, {
+      buffer,
+      name:     file.name,
+      mimeType: file.type || "application/octet-stream",
+      size:     file.size,
+    });
+    return created(c, attachment, "อัปโหลดไฟล์สำเร็จ");
+  })
+
+  // DELETE /tasks/:id/attachments/:attachmentId
+  .delete("/:id/attachments/:attachmentId", validate("param", attachmentParamSchema), async (c) => {
+    const { id, attachmentId } = c.req.valid("param");
+    const user                 = c.get("user");
+    await taskService.deleteAttachment(id, attachmentId, user.userId, user.role);
+    return ok(c, null, "ลบ attachment สำเร็จ");
+  })
+
+  // ── Time Tracking ─────────────────────────────────────────────────────────────
+
+  // POST /tasks/:id/time/start
+  .post("/:id/time/start", validate("param", idParamSchema), async (c) => {
+    const { id }  = c.req.valid("param");
+    const user    = c.get("user");
+    const session = await taskService.startTime(id, user.userId);
+    return created(c, session, "เริ่ม time tracking สำเร็จ");
+  })
+
+  // POST /tasks/:id/time/pause
+  .post("/:id/time/pause", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const user   = c.get("user");
+    const result = await taskService.pauseTime(id, user.userId);
+    return ok(c, result, "หยุด time tracking สำเร็จ");
+  })
+
+  // POST /tasks/:id/time/complete
+  .post("/:id/time/complete", validate("param", idParamSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const user   = c.get("user");
+    const task   = await taskService.completeTime(id, user.userId);
+    return ok(c, task, "เสร็จสิ้น task สำเร็จ");
+  })
+
+  // GET /tasks/:id/time
+  .get("/:id/time", validate("param", idParamSchema), async (c) => {
+    const { id }     = c.req.valid("param");
+    const sessions   = await taskService.getTimeSessions(id);
+    return ok(c, sessions, "ดึงข้อมูล time sessions สำเร็จ");
+  })
+
+  // ── Extension Requests (per task) ────────────────────────────────────────────
+
+  // GET /tasks/:id/extension-requests
+  .get("/:id/extension-requests", validate("param", idParamSchema), async (c) => {
+    const { id }     = c.req.valid("param");
+    const extensions = await taskService.listExtensionRequests(id);
+    return ok(c, extensions, "ดึงข้อมูล extension requests สำเร็จ");
+  })
+
+  // POST /tasks/:id/extension-requests
+  .post("/:id/extension-requests", validate("param", idParamSchema), validate("json", createExtensionRequestSchema), async (c) => {
+    const { id }    = c.req.valid("param");
+    const data      = c.req.valid("json");
+    const user      = c.get("user");
+    const extension = await taskService.createExtensionRequest(id, user.userId, data);
+    return created(c, extension, "สร้างคำขอขยายเวลาสำเร็จ");
+  });
