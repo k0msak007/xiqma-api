@@ -35,8 +35,8 @@ export const roleRepository = {
       .insert(roles)
       .values({
         name:        data.name,
-        description: data.description,
-        color:       data.color,
+        description: data.description ?? null,
+        color:       data.color ?? "#6b7280",
         permissions: data.permissions,
       })
       .returning();
@@ -47,10 +47,10 @@ export const roleRepository = {
     const [role] = await db
       .update(roles)
       .set({
-        name:        data.name,
-        description: data.description,
-        color:       data.color,
-        permissions: data.permissions,
+        ...(data.name        !== undefined && { name:        data.name }),
+        ...(data.description !== undefined && { description: data.description ?? null }),
+        ...(data.color       !== undefined && { color:       data.color }),
+        ...(data.permissions !== undefined && { permissions: data.permissions }),
       })
       .where(eq(roles.id, id))
       .returning();

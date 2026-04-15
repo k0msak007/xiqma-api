@@ -114,23 +114,25 @@ export const employeeRepository = {
 
     // Insert leave_quotas rows for the current year (annual / sick / personal)
     const currentYear = new Date().getFullYear();
+    const emp = (employee as unknown as Array<{ id: string }>)?.[0];
+    if (!emp) throw new Error("Failed to create employee");
     await db.insert(leaveQuotas).values([
       {
-        employeeId: employee.id,
+        employeeId: emp.id,
         year:       currentYear,
         leaveType:  "annual",
         quotaDays:  data.leaveQuotaAnnual,
         usedDays:   0,
       },
       {
-        employeeId: employee.id,
+        employeeId: emp.id,
         year:       currentYear,
         leaveType:  "sick",
         quotaDays:  data.leaveQuotaSick,
         usedDays:   0,
       },
       {
-        employeeId: employee.id,
+        employeeId: emp.id,
         year:       currentYear,
         leaveType:  "personal",
         quotaDays:  data.leaveQuotaPersonal,
@@ -138,7 +140,7 @@ export const employeeRepository = {
       },
     ]);
 
-    return employee as typeof employees.$inferSelect;
+    return emp as typeof employees.$inferSelect;
   },
 
   async update(id: string, data: UpdateEmployeeInput) {

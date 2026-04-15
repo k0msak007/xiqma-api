@@ -1947,3 +1947,415 @@ Restore folder ออกจาก archive
 ---
 
 > 📌 endpoint ที่ยังไม่ได้ระบุ response shape จะอัปเดตเมื่อ implement เสร็จ
+
+---
+
+---
+
+# Phase 3 — Task Management
+
+## GET /api/tasks ✅
+
+ดึง task ใน list — ใช้ render Kanban view และ Table view
+
+**Auth required:** ✅ Bearer token
+
+### Query Parameters
+
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `listId` | string (uuid) | ✅ | |
+| `statusId` | string (uuid) | ❌ | filter ตาม status column |
+| `assigneeId` | string (uuid) | ❌ | |
+| `priority` | string | ❌ | `low` \| `medium` \| `high` \| `urgent` |
+| `search` | string | ❌ | ILIKE title |
+| `page` | number | ❌ | default 1 |
+| `limit` | number | ❌ | default 20 |
+| `sort` | string | ❌ | default `display_order ASC` |
+
+---
+
+## GET /api/tasks/my ✅
+
+ดึง task ที่ assign ให้ตัวเอง — ใช้แสดงหน้า "My Tasks"
+
+**Auth required:** ✅ Bearer token
+
+### Query Parameters
+
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `range` | string | ❌ | `today` \| `week` \| `month` |
+
+---
+
+## GET /api/tasks/calendar ✅
+
+ดึง task ที่มี deadline หรือ plan อยู่ในช่วงที่กำหนด — ใช้แสดง calendar view
+
+**Auth required:** ✅ Bearer token
+
+### Query Parameters
+
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `start` | date string | ✅ | |
+| `end` | date string | ✅ | |
+
+---
+
+## GET /api/tasks/:id ✅
+
+ดูรายละเอียด task เต็ม รวม subtasks, ผู้รับผิดชอบ, comment count, attachment count
+
+**Auth required:** ✅ Bearer token
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `NOT_FOUND` | 404 | ไม่พบ task |
+
+---
+
+## POST /api/tasks ✅
+
+สร้าง task ใหม่
+
+**Auth required:** ✅ Bearer token
+
+### Request Body
+```json
+{
+  "title": "ออกแบบ UI หน้า Dashboard",
+  "listId": "uuid",
+  "listStatusId": "uuid",
+  "priority": "high",
+  "assigneeId": "uuid",
+  "planStart": "2026-04-15",
+  "durationDays": 3,
+  "estimateHours": 8,
+  "taskTypeId": "uuid"
+}
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `title` | string | ✅ | |
+| `listId` | string (uuid) | ✅ | |
+| `listStatusId` | string (uuid) | ✅ | |
+| `priority` | string | ✅ | `low` \| `medium` \| `high` \| `urgent` |
+| `assigneeId` | string (uuid) | ❌ | |
+| `planStart` | date string | ❌ | |
+| `durationDays` | number | ❌ | คำนวณ `planFinish` อัตโนมัติ |
+| `estimateHours` | number | ❌ | |
+| `taskTypeId` | string (uuid) | ❌ | |
+
+---
+
+## PUT /api/tasks/:id ✅
+
+แก้รายละเอียด task ทั้งหมด (full update)
+
+**Auth required:** ✅ Bearer token | assignee, creator, manager, admin
+
+---
+
+## PATCH /api/tasks/:id/status ✅
+
+เปลี่ยน status column ของ task (Kanban drag & drop หรือกด button)
+
+**Auth required:** ✅ Bearer token
+
+### Request Body
+```json
+{ "listStatusId": "uuid", "status": "in_progress" }
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `listStatusId` | string (uuid) | ✅ | |
+| `status` | string | ❌ | `pending` \| `in_progress` \| `paused` \| `completed` \| `cancelled` |
+
+---
+
+## PUT /api/tasks/reorder ✅
+
+เรียงลำดับ task ใน column ใหม่ (drag & drop บน Kanban)
+
+**Auth required:** ✅ Bearer token
+
+### Request Body
+```json
+{ "listId": "uuid", "statusId": "uuid", "orderedTaskIds": ["uuid1", "uuid2", "uuid3"] }
+```
+
+---
+
+## DELETE /api/tasks/:id ✅
+
+ยกเลิก task (soft delete — เปลี่ยน status เป็น `cancelled`)
+
+**Auth required:** ✅ Bearer token | creator, admin
+
+---
+
+## GET /api/tasks/:id/subtasks ✅
+
+ดึง subtask ทั้งหมดของ task
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## POST /api/tasks/:id/subtasks ✅
+
+เพิ่ม subtask (checklist item) ใน task
+
+**Auth required:** ✅ Bearer token
+
+### Request Body
+```json
+{ "title": "เขียน unit test", "assigneeId": "uuid" }
+```
+
+---
+
+## PUT /api/tasks/:id/subtasks/:subtaskId ✅
+
+แก้ชื่อ/ผู้รับผิดชอบ/ลำดับ subtask
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## PATCH /api/tasks/:id/subtasks/:subtaskId/toggle ✅
+
+ติ๊ก/ยกเลิกติ๊ก subtask ว่าเสร็จแล้วหรือยัง
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## DELETE /api/tasks/:id/subtasks/:subtaskId ✅
+
+ลบ subtask ออก
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## GET /api/tasks/:id/comments ✅
+
+ดึงความคิดเห็นทั้งหมดของ task เรียงจากเก่าไปใหม่
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## POST /api/tasks/:id/comments ✅
+
+เพิ่มความคิดเห็นใน task
+
+**Auth required:** ✅ Bearer token
+
+### Request Body
+```json
+{ "commentText": "งานนี้ต้องรอ design ก่อนนะครับ" }
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `commentText` | string | ✅ | ห้ามว่าง |
+
+---
+
+## PUT /api/tasks/:id/comments/:commentId ✅
+
+แก้ความคิดเห็น (เฉพาะเจ้าของ comment)
+
+**Auth required:** ✅ Bearer token | author เท่านั้น
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `FORBIDDEN` | 403 | ไม่ใช่เจ้าของ comment |
+
+---
+
+## DELETE /api/tasks/:id/comments/:commentId ✅
+
+ลบความคิดเห็น
+
+**Auth required:** ✅ Bearer token | author หรือ admin
+
+---
+
+## GET /api/tasks/:id/attachments ✅
+
+ดูไฟล์แนบทั้งหมดของ task
+
+**Auth required:** ✅ Bearer token
+
+---
+
+## POST /api/tasks/:id/attachments ✅
+
+แนบไฟล์เข้า task
+
+**Auth required:** ✅ Bearer token
+
+**Content-Type:** `multipart/form-data`
+
+| Field | Constraint | หมายเหตุ |
+|---|---|---|
+| `file` | ≤ 20MB | image/\*, application/pdf, และ mime ที่อยู่ใน whitelist |
+
+---
+
+## DELETE /api/tasks/:id/attachments/:attachmentId ✅
+
+ลบไฟล์แนบ — ลบจาก Supabase Storage ก่อนแล้วค่อยลบ row
+
+**Auth required:** ✅ Bearer token | ผู้อัปโหลด หรือ admin
+
+---
+
+## POST /api/tasks/:id/time/start ✅
+
+เริ่มจับเวลาทำงานของ task นี้
+
+**Auth required:** ✅ Bearer token | assignee
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `SESSION_ALREADY_RUNNING` | 409 | มี time session ค้างอยู่สำหรับ user นี้ (พร้อม taskId ที่กำลังทำ) |
+
+---
+
+## POST /api/tasks/:id/time/pause ✅
+
+หยุดพักชั่วคราว — บันทึกเวลาสะสม
+
+**Auth required:** ✅ Bearer token | assignee
+
+---
+
+## POST /api/tasks/:id/time/complete ✅
+
+ปิด task และบันทึกเวลาสุดท้าย
+
+**Auth required:** ✅ Bearer token | assignee
+
+---
+
+## GET /api/tasks/:id/time ✅
+
+ดูประวัติ time sessions ทั้งหมดของ task
+
+**Auth required:** ✅ Bearer token | assignee, manager, admin
+
+---
+
+## GET /api/tasks/:id/extension-requests ✅
+
+ดูรายการขอเลื่อนกำหนดส่งของ task นี้
+
+**Auth required:** ✅ Bearer token | assignee, manager, admin
+
+---
+
+## POST /api/tasks/:id/extension-requests ✅
+
+ขอเลื่อนกำหนดส่ง task พร้อมระบุเหตุผล
+
+**Auth required:** ✅ Bearer token | assignee
+
+### Request Body
+```json
+{ "newDeadline": "2026-04-30", "reason": "รอ feedback จาก client" }
+```
+
+| Field | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `newDeadline` | date string | ✅ | ต้องมากกว่า deadline ปัจจุบัน |
+| `reason` | string | ✅ | |
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `ALREADY_EXISTS` | 409 | มี request pending อยู่แล้ว |
+
+---
+
+## GET /api/extension-requests ✅
+
+ดูรายการ extension requests ทั้งหมด (inbox ของ manager)
+
+**Auth required:** ✅ Bearer token | manager, admin
+
+### Query Parameters
+
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `status` | string | ❌ | `pending` \| `approved` \| `rejected` |
+
+---
+
+## PATCH /api/extension-requests/:id/approve ✅
+
+อนุมัติคำขอเลื่อนกำหนดส่ง — deadline ของ task อัปเดตทันที
+
+**Auth required:** ✅ Bearer token | manager ของ assignee หรือ admin
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `FORBIDDEN` | 403 | ไม่มีสิทธิ์อนุมัติ |
+| `NOT_FOUND` | 404 | ไม่พบ extension request |
+
+---
+
+## PATCH /api/extension-requests/:id/reject ✅
+
+ปฏิเสธคำขอเลื่อนกำหนดส่ง พร้อมระบุเหตุผล
+
+**Auth required:** ✅ Bearer token | manager, admin
+
+### Request Body
+```json
+{ "rejectReason": "กำหนดส่งนี้สำคัญมาก ไม่สามารถเลื่อนได้" }
+```
+
+---
+
+## GET /api/search ✅
+
+ค้นหาข้ามทุก entity — ใช้สำหรับ global search bar
+
+**Auth required:** ✅ Bearer token
+
+### Query Parameters
+
+| Param | Type | Required | หมายเหตุ |
+|---|---|---|---|
+| `q` | string | ✅ | อย่างน้อย 2 ตัวอักษร |
+| `types` | string | ❌ | comma-separated: `task,space,employee` (default: ค้นทุก type) |
+| `limit` | number | ❌ | default 10 |
+
+### Response 200
+```json
+{
+  "success": true,
+  "data": [
+    { "type": "task", "id": "uuid", "title": "ออกแบบ UI", "listId": "uuid" },
+    { "type": "space", "id": "uuid", "title": "Frontend Team" },
+    { "type": "employee", "id": "uuid", "name": "สมชาย ใจดี", "email": "somchai@xiqma.com" }
+  ]
+}
+```
+
+### Errors
+| Code | HTTP | เงื่อนไข |
+|---|---|---|
+| `VALIDATION_ERROR` | 422 | `q` ว่างหรือสั้นกว่า 2 ตัวอักษร |

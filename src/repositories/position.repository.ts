@@ -75,11 +75,11 @@ export const positionRepository = {
       .insert(positions)
       .values({
         name:             data.name,
-        department:       data.department,
-        level:            data.level,
-        jobLevelCode:     data.jobLevelCode,
+        department:       data.department ?? null,
+        level:            data.level ?? null,
+        jobLevelCode:     data.jobLevelCode ?? null,
         color:            data.color ?? "#6b7280",
-        parentPositionId: data.parentPositionId,
+        parentPositionId: data.parentPositionId ?? null,
       })
       .returning();
     return position;

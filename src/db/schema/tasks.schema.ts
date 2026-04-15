@@ -59,6 +59,7 @@ export const tasks = pgTable("tasks", {
   status:             taskStatusEnum("status").notNull().default("pending"),
   displayOrder:       integer("display_order").notNull().default(0),
   score:              numeric("score"),
+  estimateProgress:  integer("estimate_progress").notNull().default(0),
   blockedNote:        text("blocked_note"),
   blockedAt:          timestamp("blocked_at", { withTimezone: true }),
   tags:               jsonb("tags").notNull().default([]),

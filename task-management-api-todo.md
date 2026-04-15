@@ -878,12 +878,12 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] require `?list_id=`
-- [ ] query tasks + JOIN statuses, task_types, assignee, creator
-- [ ] subquery count subtasks, comments
-- [ ] filter ตาม query params ทั้งหมด
-- [ ] default sort: `display_order ASC`
-- [ ] LIMIT/OFFSET pagination + return meta
+- [x] require `?list_id=`
+- [x] query tasks + JOIN statuses, task_types, assignee, creator
+- [x] subquery count subtasks, comments
+- [x] filter ตาม query params ทั้งหมด
+- [x] default sort: `display_order ASC`
+- [x] LIMIT/OFFSET pagination + return meta
 
 ---
 
@@ -894,9 +894,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] WHERE `assignee_id = ctx.user.id` + `status NOT IN ('completed','cancelled')`
-- [ ] filter deadline ตาม `?range=` (today/week/month)
-- [ ] ORDER BY `deadline ASC NULLS LAST`
+- [x] WHERE `assignee_id = ctx.user.id` + `status NOT IN ('completed','cancelled')`
+- [x] filter deadline ตาม `?range=` (today/week/month)
+- [x] ORDER BY `deadline ASC NULLS LAST`
 
 ---
 
@@ -907,10 +907,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate `start` และ `end` เป็น date
-- [ ] WHERE `deadline BETWEEN start AND end` OR `plan_start BETWEEN start AND end`
-- [ ] employee ธรรมดา → filter `assignee_id = ctx.user.id`
-- [ ] manager/admin → เห็นทีม
+- [x] validate `start` และ `end` เป็น date
+- [x] WHERE `deadline BETWEEN start AND end` OR `plan_start BETWEEN start AND end`
+- [x] employee ธรรมดา → filter `assignee_id = ctx.user.id`
+- [x] manager/admin → เห็นทีม
 
 ---
 
@@ -921,10 +921,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query task + JOIN ทั้งหมด (status, type, assignee, creator, list)
-- [ ] aggregate subtasks เป็น JSON array
-- [ ] COUNT comments + attachments
-- [ ] ถ้าไม่เจอ → 404
+- [x] query task + JOIN ทั้งหมด (status, type, assignee, creator, list)
+- [x] aggregate subtasks เป็น JSON array
+- [x] COUNT comments + attachments
+- [x] ถ้าไม่เจอ → 404
 
 ---
 
@@ -935,11 +935,11 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ title, list_id, list_status_id, priority, assignee_id, ... }`
-- [ ] generate `display_id = 'TK-' + LPAD(nextval('task_display_seq'), 6, '0')`
-- [ ] คำนวณ `plan_finish = plan_start + (duration_days - 1)` ถ้ามีทั้งคู่
-- [ ] INSERT `tasks` พร้อม `creator_id = ctx.user.id`, `status = 'pending'`
-- [ ] return task ที่สร้าง
+- [x] validate body: `{ title, list_id, list_status_id, priority, assignee_id, ... }`
+- [x] generate `display_id = 'TK-' + LPAD(nextval('task_display_seq'), 6, '0')`
+- [x] คำนวณ `plan_finish = plan_start + (duration_days - 1)` ถ้ามีทั้งคู่
+- [x] INSERT `tasks` พร้อม `creator_id = ctx.user.id`, `status = 'pending'`
+- [x] return task ที่สร้าง
 
 ---
 
@@ -950,9 +950,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body ครบ
-- [ ] recalculate `plan_finish` ถ้า plan_start หรือ duration_days เปลี่ยน
-- [ ] UPDATE + `updated_at = now()`
+- [x] validate body ครบ
+- [x] recalculate `plan_finish` ถ้า plan_start หรือ duration_days เปลี่ยน
+- [x] UPDATE + `updated_at = now()`
 
 ---
 
@@ -963,10 +963,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ list_status_id, status? }`
-- [ ] UPDATE `list_status_id` + `status`
-- [ ] ถ้า status เปลี่ยนเป็น `in_progress` → set `started_at = now()` (เฉพาะครั้งแรก)
-- [ ] ถ้า status เปลี่ยนเป็น `completed` → set `completed_at = now()` (เฉพาะครั้งแรก)
+- [x] validate body: `{ list_status_id, status? }`
+- [x] UPDATE `list_status_id` + `status`
+- [x] ถ้า status เปลี่ยนเป็น `in_progress` → set `started_at = now()` (เฉพาะครั้งแรก)
+- [x] ถ้า status เปลี่ยนเป็น `completed` → set `completed_at = now()` (เฉพาะครั้งแรก)
 
 ---
 
@@ -977,10 +977,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ list_id, status_id, ordered_task_ids: string[] }`
-- [ ] ตรวจว่า task ทุกตัวอยู่ใน list_id นั้น
-- [ ] loop UPDATE `display_order = index` ทุก task ใน **db.transaction()** ครอบทั้งหมด
-- [ ] rollback ถ้า error ตรงกลาง
+- [x] validate body: `{ list_id, status_id, ordered_task_ids: string[] }`
+- [x] ตรวจว่า task ทุกตัวอยู่ใน list_id นั้น
+- [x] loop UPDATE `display_order = index` ทุก task ใน **db.transaction()** ครอบทั้งหมด
+- [x] rollback ถ้า error ตรงกลาง
 
 ---
 
@@ -991,7 +991,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `status = 'cancelled', updated_at = now()`
+- [x] UPDATE `status = 'cancelled', updated_at = now()`
 
 ---
 
@@ -1006,8 +1006,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `subtasks LEFT JOIN employees (assignee)` WHERE `parent_task_id = :id`
-- [ ] ORDER BY `display_order`
+- [x] query `subtasks LEFT JOIN employees (assignee)` WHERE `parent_task_id = :id`
+- [x] ORDER BY `display_order`
 
 ---
 
@@ -1018,9 +1018,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ title, assignee_id? }`
-- [ ] `display_order = MAX + 1` ใน task นั้น
-- [ ] INSERT `subtasks`
+- [x] validate body: `{ title, assignee_id? }`
+- [x] `display_order = MAX + 1` ใน task นั้น
+- [x] INSERT `subtasks`
 
 ---
 
@@ -1031,8 +1031,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่า subtask_id อยู่ใน task_id นั้น
-- [ ] UPDATE
+- [x] ตรวจว่า subtask_id อยู่ใน task_id นั้น
+- [x] UPDATE
 
 ---
 
@@ -1043,8 +1043,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `is_completed = NOT is_completed`
-- [ ] return state ใหม่
+- [x] UPDATE `is_completed = NOT is_completed`
+- [x] return state ใหม่
 
 ---
 
@@ -1055,8 +1055,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่า subtask_id อยู่ใน task_id นั้น
-- [ ] DELETE จริง
+- [x] ตรวจว่า subtask_id อยู่ใน task_id นั้น
+- [x] DELETE จริง
 
 ---
 
@@ -1071,8 +1071,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `task_comments JOIN employees (author)` WHERE `task_id = :id`
-- [ ] ORDER BY `created_at ASC`
+- [x] query `task_comments JOIN employees (author)` WHERE `task_id = :id`
+- [x] ORDER BY `created_at ASC`
 
 ---
 
@@ -1083,8 +1083,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ comment_text }` (ห้ามว่าง)
-- [ ] INSERT พร้อม `author_id = ctx.user.id`
+- [x] validate body: `{ comment_text }` (ห้ามว่าง)
+- [x] INSERT พร้อม `author_id = ctx.user.id`
 
 ---
 
@@ -1095,8 +1095,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่า `author_id = ctx.user.id` → 403 ถ้าไม่ใช่
-- [ ] UPDATE `comment_text, updated_at = now()`
+- [x] ตรวจว่า `author_id = ctx.user.id` → 403 ถ้าไม่ใช่
+- [x] UPDATE `comment_text, updated_at = now()`
 
 ---
 
@@ -1107,8 +1107,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission (author หรือ role = admin)
-- [ ] DELETE
+- [x] ตรวจ permission (author หรือ role = admin)
+- [x] DELETE
 
 ---
 
@@ -1123,8 +1123,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `task_attachments JOIN employees (uploaded_by)` WHERE `task_id = :id`
-- [ ] ORDER BY `created_at DESC`
+- [x] query `task_attachments JOIN employees (uploaded_by)` WHERE `task_id = :id`
+- [x] ORDER BY `created_at DESC`
 
 ---
 
@@ -1135,10 +1135,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] รับ `multipart/form-data`
-- [ ] validate: ขนาด ≤ 20MB, mime_type อยู่ใน whitelist (image/\*, application/pdf ฯลฯ)
-- [ ] upload ไปที่ Supabase Storage `task-attachments/{task_id}/{filename}`
-- [ ] INSERT `task_attachments` พร้อม url, size, mime, uploaded_by
+- [x] รับ `multipart/form-data`
+- [x] validate: ขนาด ≤ 20MB, mime_type อยู่ใน whitelist (image/\*, application/pdf ฯลฯ)
+- [x] upload ไปที่ Supabase Storage `task-attachments/{task_id}/{filename}`
+- [x] INSERT `task_attachments` พร้อม url, size, mime, uploaded_by
 
 ---
 
@@ -1149,9 +1149,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission
-- [ ] ลบไฟล์จาก Supabase Storage ก่อน
-- [ ] DELETE row จาก `task_attachments`
+- [x] ตรวจ permission
+- [x] ลบไฟล์จาก Supabase Storage ก่อน
+- [x] DELETE row จาก `task_attachments`
 
 ---
 
@@ -1166,9 +1166,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี session ค้างอยู่ (ended_at IS NULL) สำหรับ user นี้ → 409 `SESSION_ALREADY_RUNNING` พร้อมบอก task_id ที่กำลังทำ
-- [ ] INSERT `task_time_sessions` พร้อม `started_at = now()`
-- [ ] UPDATE task `status = 'in_progress'`, set `started_at` ถ้ายังไม่มีค่า
+- [x] ตรวจว่ามี session ค้างอยู่ (ended_at IS NULL) สำหรับ user นี้ → 409 `SESSION_ALREADY_RUNNING` พร้อมบอก task_id ที่กำลังทำ
+- [x] INSERT `task_time_sessions` พร้อม `started_at = now()`
+- [x] UPDATE task `status = 'in_progress'`, set `started_at` ถ้ายังไม่มีค่า
 
 ---
 
@@ -1179,9 +1179,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE session ที่ `ended_at IS NULL` → set `ended_at = now()`, คำนวณ `duration_min`
-- [ ] UPDATE task `accumulated_minutes += duration_min`, recalculate `actual_hours`
-- [ ] UPDATE task `status = 'paused'`
+- [x] UPDATE session ที่ `ended_at IS NULL` → set `ended_at = now()`, คำนวณ `duration_min`
+- [x] UPDATE task `accumulated_minutes += duration_min`, recalculate `actual_hours`
+- [x] UPDATE task `status = 'paused'`
 
 ---
 
@@ -1192,8 +1192,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ถ้ามี session ค้าง → ปิดก่อน (logic เหมือน pause)
-- [ ] UPDATE task `status = 'completed'`, `completed_at = now()`, คำนวณ `actual_hours` สุดท้าย
+- [x] ถ้ามี session ค้าง → ปิดก่อน (logic เหมือน pause)
+- [x] UPDATE task `status = 'completed'`, `completed_at = now()`, คำนวณ `actual_hours` สุดท้าย
 
 ---
 
@@ -1204,7 +1204,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `task_time_sessions` WHERE `task_id = :id` ORDER BY `started_at DESC`
+- [x] query `task_time_sessions` WHERE `task_id = :id` ORDER BY `started_at DESC`
 
 ---
 
@@ -1219,8 +1219,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `due_extension_requests JOIN employees (requester + reviewer)`
-- [ ] ORDER BY `created_at DESC`
+- [x] query `due_extension_requests JOIN employees (requester + reviewer)`
+- [x] ORDER BY `created_at DESC`
 
 ---
 
@@ -1231,11 +1231,11 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ new_deadline, reason }`
-- [ ] ตรวจว่ามี request pending อยู่แล้วไหม → 409
-- [ ] ตรวจว่า `new_deadline > deadline` ปัจจุบัน → 400 ถ้าไม่ใช่
-- [ ] generate `display_id = 'EX-' + LPAD(nextval, 6, '0')`
-- [ ] INSERT
+- [x] validate body: `{ new_deadline, reason }`
+- [x] ตรวจว่ามี request pending อยู่แล้วไหม → 409
+- [x] ตรวจว่า `new_deadline > deadline` ปัจจุบัน → 400 ถ้าไม่ใช่
+- [x] generate `display_id = 'EX-' + LPAD(nextval, 6, '0')`
+- [x] INSERT
 
 ---
 
@@ -1246,9 +1246,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission
-- [ ] UPDATE `extension_requests` SET `status = 'approved', reviewed_by, reviewed_at`
-- [ ] UPDATE `tasks` SET `deadline = new_deadline` จาก extension request นั้น
+- [x] ตรวจ permission
+- [x] UPDATE `extension_requests` SET `status = 'approved', reviewed_by, reviewed_at`
+- [x] UPDATE `tasks` SET `deadline = new_deadline` จาก extension request นั้น
 
 ---
 
@@ -1259,8 +1259,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ reject_reason }`
-- [ ] UPDATE `status = 'rejected'` + เหตุผล
+- [x] validate body: `{ reject_reason }`
+- [x] UPDATE `status = 'rejected'` + เหตุผล
 
 ---
 
@@ -1271,9 +1271,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `due_extension_requests JOIN tasks JOIN employees`
-- [ ] filter `?status=` ถ้ามี
-- [ ] manager → filter เฉพาะ task ที่ assignee อยู่ในทีมตัวเอง
+- [x] query `due_extension_requests JOIN tasks JOIN employees`
+- [x] filter `?status=` ถ้ามี
+- [x] manager → filter เฉพาะ task ที่ assignee อยู่ในทีมตัวเอง
 
 ---
 
@@ -1288,11 +1288,11 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate `?q=` ต้องมีและยาวอย่างน้อย 2 ตัวอักษร
-- [ ] UNION query: tasks (ILIKE title) + employees (ILIKE name) + spaces (ILIKE name)
-- [ ] filter ตาม `?types=` ที่ส่งมา (ถ้าไม่ส่ง = ค้นทุก type)
-- [ ] return รวมกัน จำกัด `?limit=` (default 10)
-- [ ] ต้องเร็ว < 300ms — ใช้ index ที่ทำไว้
+- [x] validate `?q=` ต้องมีและยาวอย่างน้อย 2 ตัวอักษร
+- [x] UNION query: tasks (ILIKE title) + employees (ILIKE name) + spaces (ILIKE name)
+- [x] filter ตาม `?types=` ที่ส่งมา (ถ้าไม่ส่ง = ค้นทุก type)
+- [x] return รวมกัน จำกัด `?limit=` (default 10)
+- [x] ต้องเร็ว < 300ms — ใช้ index ที่ทำไว้
 
 ---
 

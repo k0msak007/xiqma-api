@@ -30,7 +30,7 @@ export const listEmployeesSchema = z.object({
   department: z.string().optional(),
   isActive:   z.coerce.boolean().default(true),
   page:       z.coerce.number().int().min(1).default(1),
-  limit:      z.coerce.number().int().min(1).max(100).default(20),
+  limit:      z.coerce.number().int().min(1).max(500).default(20),
 });
 
 export const changePasswordSchema = z.object({

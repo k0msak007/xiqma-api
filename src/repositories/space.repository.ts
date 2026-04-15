@@ -63,7 +63,7 @@ export const spaceRepository = {
       .values({
         name:         data.name,
         color:        data.color ?? "#3b82f6",
-        icon:         data.icon,
+        icon:         data.icon ?? null,
         displayOrder: maxOrder + 1,
       })
       .returning();
@@ -71,13 +71,15 @@ export const spaceRepository = {
     // Insert creator + all memberIds (ON CONFLICT DO NOTHING via unique constraint)
     const memberIds = Array.from(new Set([creatorId, ...(data.memberIds ?? [])]));
     if (memberIds.length > 0) {
+      const sp = space as { id: string } | undefined;
+      if (!sp) throw new Error("Failed to create space");
       await db
         .insert(spaceMembers)
-        .values(memberIds.map(eid => ({ spaceId: space.id, employeeId: eid })))
+        .values(memberIds.map(eid => ({ spaceId: sp.id, employeeId: eid })))
         .onConflictDoNothing();
     }
 
-    return space;
+    return space as typeof spaces.$inferSelect;
   },
 
   async update(id: string, data: UpdateSpaceInput) {
@@ -86,7 +88,7 @@ export const spaceRepository = {
       .set({
         ...(data.name         !== undefined && { name:         data.name }),
         ...(data.color        !== undefined && { color:        data.color }),
-        ...(data.icon         !== undefined && { icon:         data.icon }),
+        ...(data.icon         !== undefined && { icon:         data.icon ?? null }),
         ...(data.displayOrder !== undefined && { displayOrder: data.displayOrder }),
       })
       .where(eq(spaces.id, id))

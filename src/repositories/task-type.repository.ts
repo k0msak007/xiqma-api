@@ -30,11 +30,11 @@ export const taskTypeRepository = {
       .insert(taskTypes)
       .values({
         name:            data.name,
-        description:     data.description,
-        color:           data.color,
-        category:        data.category,
-        countsForPoints: data.countsForPoints,
-        fixedPoints:     data.fixedPoints,
+        description:     data.description ?? null,
+        color:           data.color ?? "#6b7280",
+        category:        data.category ?? null,
+        countsForPoints: data.countsForPoints ?? true,
+        fixedPoints:     data.fixedPoints ?? null,
       })
       .returning();
     return taskType;

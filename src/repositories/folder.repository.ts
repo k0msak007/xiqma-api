@@ -49,7 +49,7 @@ export const folderRepository = {
       .values({
         name:         data.name,
         spaceId:      data.spaceId,
-        color:        data.color,
+        color:        data.color ?? null,
         displayOrder: maxOrder + 1,
       })
       .returning();

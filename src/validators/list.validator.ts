@@ -14,7 +14,7 @@ export const updateListSchema = z.object({
 });
 
 export const listQuerySchema = z.object({
-  spaceId:  z.string().uuid(),
+  spaceId:  z.string().uuid("spaceId ต้องเป็น UUID"),
   folderId: z.string().uuid().optional(),
 });
 

@@ -51,7 +51,7 @@ export const taskRepository = {
     if (statusId)   conditions.push(`t.list_status_id = '${statusId}'::uuid`);
     if (assigneeId) conditions.push(`t.assignee_id = '${assigneeId}'::uuid`);
     if (priority)   conditions.push(`t.priority = '${priority}'`);
-    if (search)     conditions.push(`t.title ILIKE '%${search.replace(/'/g, "''")}%'`);
+    if (search && search.length <= 200) conditions.push(`t.title ILIKE '%${search.replace(/\\/g, "\\\\").replace(/'/g, "''")}%'`);
 
     const whereClause = conditions.join(" AND ");
 
@@ -63,7 +63,7 @@ export const taskRepository = {
         t.accumulated_minutes, t.actual_hours,
         t.plan_start, t.duration_days, t.plan_finish, t.deadline,
         t.started_at, t.completed_at, t.status, t.display_order,
-        t.score, t.blocked_note, t.blocked_at, t.tags,
+        t.score, t.estimate_progress, t.blocked_note, t.blocked_at, t.tags,
         t.created_at, t.updated_at,
         ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
         a.name AS assignee_name, a.avatar_url AS assignee_avatar,
@@ -108,7 +108,7 @@ export const taskRepository = {
         t.accumulated_minutes, t.actual_hours,
         t.plan_start, t.duration_days, t.plan_finish, t.deadline,
         t.started_at, t.completed_at, t.status, t.display_order,
-        t.score, t.blocked_note, t.blocked_at, t.tags,
+        t.score, t.estimate_progress, t.blocked_note, t.blocked_at, t.tags,
         t.created_at, t.updated_at,
         ls.name AS status_name, ls.color AS status_color,
         l.name AS list_name
@@ -165,7 +165,7 @@ export const taskRepository = {
         t.accumulated_minutes, t.actual_hours,
         t.plan_start, t.duration_days, t.plan_finish, t.deadline,
         t.started_at, t.completed_at, t.status, t.display_order,
-        t.score, t.blocked_note, t.blocked_at, t.tags,
+        t.score, t.estimate_progress, t.blocked_note, t.blocked_at, t.tags,
         t.created_at, t.updated_at,
         ls.id AS status_id, ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
         a.id AS assignee_id_ref, a.name AS assignee_name, a.avatar_url AS assignee_avatar,
@@ -253,6 +253,7 @@ export const taskRepository = {
     if (data.deadline !== undefined)          sets.push(data.deadline ? `deadline = '${data.deadline}'::timestamptz` : "deadline = NULL");
     if (data.description !== undefined)       sets.push(data.description != null ? `description = '${data.description.replace(/'/g, "''")}'` : "description = NULL");
     if (data.tags !== undefined)              sets.push(`tags = '${JSON.stringify(data.tags)}'::jsonb`);
+    if (data.estimateProgress !== undefined) sets.push(data.estimateProgress != null ? `estimate_progress = ${data.estimateProgress}` : "estimate_progress = NULL");
     if (data.blockedNote !== undefined)       sets.push(data.blockedNote != null ? `blocked_note = '${data.blockedNote.replace(/'/g, "''")}'` : "blocked_note = NULL");
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -426,7 +427,32 @@ export const taskRepository = {
       .insert(taskComments)
       .values({ taskId, authorId, commentText: data.commentText })
       .returning();
-    return comment;
+    
+    if (!comment) {
+      throw new Error("Failed to create comment");
+    }
+    
+    // Return comment with author info
+    const [result] = await db
+      .select({
+        id:          taskComments.id,
+        taskId:      taskComments.taskId,
+        authorId:    taskComments.authorId,
+        commentText: taskComments.commentText,
+        createdAt:   taskComments.createdAt,
+        updatedAt:   taskComments.updatedAt,
+        authorName:   employees.name,
+        authorAvatar: employees.avatarUrl,
+      })
+      .from(taskComments)
+      .leftJoin(employees, eq(taskComments.authorId, employees.id))
+      .where(eq(taskComments.id, comment.id));
+    
+    if (!result) {
+      throw new Error("Failed to fetch created comment");
+    }
+    
+    return result;
   },
 
   async updateComment(id: string, data: UpdateCommentInput) {
@@ -435,7 +461,26 @@ export const taskRepository = {
       .set({ commentText: data.commentText, updatedAt: sql`now()` })
       .where(eq(taskComments.id, id))
       .returning();
-    return comment ?? null;
+    
+    if (!comment) return null;
+    
+    // Return comment with author info
+    const [result] = await db
+      .select({
+        id:          taskComments.id,
+        taskId:      taskComments.taskId,
+        authorId:    taskComments.authorId,
+        commentText: taskComments.commentText,
+        createdAt:   taskComments.createdAt,
+        updatedAt:   taskComments.updatedAt,
+        authorName:   employees.name,
+        authorAvatar: employees.avatarUrl,
+      })
+      .from(taskComments)
+      .leftJoin(employees, eq(taskComments.authorId, employees.id))
+      .where(eq(taskComments.id, id));
+    
+    return result ?? null;
   },
 
   async deleteComment(id: string) {
@@ -685,7 +730,7 @@ export const taskRepository = {
   // ── Search ────────────────────────────────────────────────────────────────────
 
   async search(q: string, types: string[], limit: number, userId: string, role: string) {
-    const escaped = q.replace(/'/g, "''");
+    const escaped = q.replace(/\\/g, "\\\\").replace(/'/g, "''");
     const results: { type: string; items: unknown[] }[] = [];
 
     if (types.includes("task")) {

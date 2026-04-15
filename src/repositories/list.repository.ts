@@ -14,6 +14,11 @@ const DEFAULT_STATUSES = [
 
 export const listRepository = {
   async findAll(spaceId: string, folderId?: string) {
+    const conditions = folderId
+      ? and(eq(lists.spaceId, spaceId), eq(lists.folderId, folderId))
+      : eq(lists.spaceId, spaceId);
+
+    // Get lists
     const rows = await db
       .select({
         id:           lists.id,
@@ -23,42 +28,47 @@ export const listRepository = {
         color:        lists.color,
         displayOrder: lists.displayOrder,
         createdAt:    lists.createdAt,
-        taskCount:    sql<number>`(SELECT COUNT(*) FROM tasks WHERE list_id = ${lists.id} AND deleted_at IS NULL)`.mapWith(Number),
-        doneCount:    sql<number>`(
-          SELECT COUNT(*) FROM tasks t
-          JOIN list_statuses ls ON t.list_status_id = ls.id
-          WHERE t.list_id = ${lists.id} AND ls.type IN ('done','closed') AND t.deleted_at IS NULL
-        )`.mapWith(Number),
       })
       .from(lists)
-      .where(
-        folderId
-          ? and(eq(lists.spaceId, spaceId), eq(lists.folderId, folderId))
-          : eq(lists.spaceId, spaceId)
-      )
+      .where(conditions)
       .orderBy(asc(lists.displayOrder));
 
-    // Attach statuses to each list
-    const listIds = rows.map(r => r.id);
-    if (listIds.length === 0) return rows.map(r => ({ ...r, statuses: [] }));
+    if (rows.length === 0) return rows;
 
-    const statuses = await db
+    // Get statuses for these lists only
+    const listIds = rows.map(r => r.id);
+    const allStatuses = await db
       .select()
       .from(listStatuses)
-      .where(sql`list_id = ANY(${listIds}::uuid[])`)
-      .orderBy(asc(listStatuses.displayOrder));
+      .where(sql`${listStatuses.listId} IN (${sql.join(listIds.map(id => sql`${id}::uuid`), sql`, `)})`);
+    
+    // Filter by list IDs and attach to each row
+    const result = rows.map(row => {
+      const rowStatuses = allStatuses.filter(s => s.listId === row.id);
+      return {
+        ...row,
+        taskCount: 0,
+        doneCount: 0,
+        statuses: rowStatuses.sort((a, b) => a.displayOrder - b.displayOrder),
+      };
+    });
 
-    return rows.map(row => ({
-      ...row,
-      statuses: statuses.filter(s => s.listId === row.id),
-    }));
+    return result;
   },
 
   async findById(id: string) {
-    return db.query.lists.findFirst({
+    const list = await db.query.lists.findFirst({
       where: eq(lists.id, id),
-      with: { statuses: { orderBy: asc(listStatuses.displayOrder) } },
     });
+    if (!list) return null;
+    
+    const statuses = await db
+      .select()
+      .from(listStatuses)
+      .where(eq(listStatuses.listId, id))
+      .orderBy(asc(listStatuses.displayOrder));
+    
+    return { ...list, statuses };
   },
 
   async getMaxDisplayOrder(spaceId: string) {
@@ -71,27 +81,29 @@ export const listRepository = {
 
   async create(data: CreateListInput) {
     const maxOrder = await this.getMaxDisplayOrder(data.spaceId);
-    const [list] = await db
+    const result = await db
       .insert(lists)
       .values({
         name:         data.name,
         spaceId:      data.spaceId,
-        folderId:     data.folderId,
-        color:        data.color,
+        folderId:     data.folderId ?? null,
+        color:        data.color ?? null,
         displayOrder: maxOrder + 1,
       })
       .returning();
 
     // Insert default statuses
+    const listItem = result[0] as { id: string } | undefined;
+    if (!listItem) throw new Error("Failed to create list");
     await db.insert(listStatuses).values(
-      DEFAULT_STATUSES.map(s => ({ ...s, listId: list.id }))
+      DEFAULT_STATUSES.map(s => ({ ...s, listId: listItem.id }))
     );
 
-    return list;
+    return listItem as typeof lists.$inferSelect;
   },
 
   async update(id: string, data: UpdateListInput) {
-    const [list] = await db
+    const [listItem] = await db
       .update(lists)
       .set({
         ...(data.name         !== undefined && { name:         data.name }),
@@ -100,7 +112,7 @@ export const listRepository = {
       })
       .where(eq(lists.id, id))
       .returning();
-    return list;
+    return listItem;
   },
 
   async delete(id: string) {
@@ -184,13 +196,12 @@ export const listRepository = {
   },
 
   async reorderStatuses(listId: string, orderedIds: string[]) {
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        await tx
-          .update(listStatuses)
-          .set({ displayOrder: i + 1 })
-          .where(and(eq(listStatuses.id, orderedIds[i]), eq(listStatuses.listId, listId)));
-      }
+    const updates = orderedIds.map((statusId, idx) => {
+      return db.execute(sql`
+        UPDATE list_statuses SET display_order = ${idx + 1} 
+        WHERE id = ${statusId}::uuid AND list_id = ${listId}::uuid
+      `);
     });
+    await Promise.all(updates);
   },
 };

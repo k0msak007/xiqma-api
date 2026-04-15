@@ -37,7 +37,7 @@ export const holidayRepository = {
         name:        data.name,
         holidayDate: data.holidayDate,
         isRecurring: data.isRecurring,
-        note:        data.note,
+        note:        data.note ?? null,
       })
       .returning();
     return holiday;

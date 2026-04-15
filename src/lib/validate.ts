@@ -65,11 +65,9 @@ export function validate<
     if (!result.success) {
       const body: ErrorResponse = {
         success: false,
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "ข้อมูลที่ส่งมาไม่ถูกต้อง",
-          details: flattenZodErrors(result.error),
-        },
+        message: "ข้อมูลที่ส่งมาไม่ถูกต้อง",
+        error: "VALIDATION_ERROR",
+        details: flattenZodErrors(result.error),
       };
       return c.json(body, 400);
     }

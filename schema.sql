@@ -308,6 +308,7 @@ CREATE TABLE tasks (
   -- [FIX-2] เพิ่ม display_order สำหรับ kanban drag & drop reorder
   display_order  INTEGER     NOT NULL DEFAULT 0,
   score          NUMERIC,
+  estimate_progress INTEGER   NOT NULL DEFAULT 0,
   blocked_note   TEXT,
   blocked_at     TIMESTAMPTZ,
   tags           JSONB       NOT NULL DEFAULT '[]',

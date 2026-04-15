@@ -7,7 +7,7 @@ export const taskQuerySchema = z.object({
   priority:   z.enum(["low","normal","high","urgent"]).optional(),
   search:     z.string().optional(),
   page:       z.coerce.number().int().min(1).optional().default(1),
-  limit:      z.coerce.number().int().min(1).max(100).optional().default(20),
+  limit:      z.coerce.number().int().min(1).max(500).optional().default(20),
   sort:       z.enum(["display_order","deadline","created_at","priority"]).optional().default("display_order"),
 });
 
@@ -52,6 +52,7 @@ export const updateTaskSchema = z.object({
   deadline:          z.string().datetime({ offset: true }).optional().nullable(),
   description:       z.string().optional().nullable(),
   tags:              z.array(z.string()).optional(),
+  estimateProgress: z.number().int().min(0).max(100).optional().nullable(),
   blockedNote:       z.string().optional().nullable(),
 });
 

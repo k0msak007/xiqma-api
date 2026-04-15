@@ -75,7 +75,7 @@ export const tasksRouter = new Hono()
     );
     const page  = query.page ?? 1;
     const limit = query.limit ?? 20;
-    return ok(c, result.data, "ดึงข้อมูล task สำเร็จ", {
+    return ok(c, { data: result.data, total: result.total }, "ดึงข้อมูล task สำเร็จ", {
       page,
       limit,
       total:      result.total,

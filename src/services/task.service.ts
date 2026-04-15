@@ -2,7 +2,7 @@ import { taskRepository } from "@/repositories/task.repository.ts";
 import { listRepository } from "@/repositories/list.repository.ts";
 import { spaceRepository } from "@/repositories/space.repository.ts";
 import { employeeRepository } from "@/repositories/employee.repository.ts";
-import { supabase, ATTACHMENTS_BUCKET } from "@/lib/supabase.ts";
+import { supabase, ATTACHMENTS_BUCKET, getSignedAvatarUrl } from "@/lib/supabase.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
 import type {
   CreateTaskInput,
@@ -171,7 +171,19 @@ export const taskService = {
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     }
-    return taskRepository.findComments(taskId);
+    const comments = await taskRepository.findComments(taskId);
+    
+    // Generate signed URLs for avatars
+    const commentsWithSignedAvatars = await Promise.all(
+      comments.map(async (comment) => ({
+        ...comment,
+        authorAvatar: comment.authorAvatar 
+          ? await getSignedAvatarUrl(comment.authorAvatar)
+          : null,
+      }))
+    );
+    
+    return commentsWithSignedAvatars;
   },
 
   async createComment(taskId: string, authorId: string, data: CreateCommentInput) {
@@ -179,7 +191,15 @@ export const taskService = {
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     }
-    return taskRepository.createComment(taskId, authorId, data);
+    const comment = await taskRepository.createComment(taskId, authorId, data);
+    
+    // Generate signed URL for avatar
+    return {
+      ...comment,
+      authorAvatar: comment.authorAvatar 
+        ? await getSignedAvatarUrl(comment.authorAvatar)
+        : null,
+    };
   },
 
   async updateComment(taskId: string, commentId: string, userId: string, data: UpdateCommentInput) {
