@@ -9,7 +9,12 @@ export const employeeRepository = {
     const { search, department, isActive, page, limit } = params;
     const offset = (page - 1) * limit;
 
-    const conditions = [eq(employees.isActive, isActive)];
+    const conditions = [];
+
+    // isActive เป็น optional — ถ้าไม่ระบุ ให้คืนทุก status
+    if (isActive !== undefined) {
+      conditions.push(eq(employees.isActive, isActive));
+    }
 
     if (department) {
       conditions.push(eq(employees.department, department));
@@ -25,7 +30,8 @@ export const employeeRepository = {
       );
     }
 
-    const whereClause = and(...conditions);
+    // and() with empty array returns undefined → no WHERE clause (ดึงทุก record)
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [rows, totalResult] = await Promise.all([
       db

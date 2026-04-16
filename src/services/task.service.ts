@@ -276,6 +276,10 @@ export const taskService = {
     return taskRepository.findTimeSessions(taskId);
   },
 
+  async getRunningSessions(employeeId: string) {
+    return taskRepository.findRunningSession(employeeId);
+  },
+
   // ── Attachments ───────────────────────────────────────────────────────────────
 
   async listAttachments(taskId: string) {

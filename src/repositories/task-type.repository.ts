@@ -1,12 +1,13 @@
-import { eq, asc, count } from "drizzle-orm";
+import { eq, asc, count, and } from "drizzle-orm";
 import { db } from "@/lib/db.ts";
 import { taskTypes } from "@/db/schema/workspace.schema.ts";
 import { tasks } from "@/db/schema/tasks.schema.ts";
 import type { CreateTaskTypeInput, UpdateTaskTypeInput } from "@/validators/task-type.validator.ts";
 
 export const taskTypeRepository = {
-  async findAll() {
+  async findAll(category?: "private" | "organization") {
     return db.query.taskTypes.findMany({
+      where: category ? eq(taskTypes.category, category) : undefined,
       orderBy: [asc(taskTypes.name)],
     });
   },

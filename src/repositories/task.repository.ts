@@ -135,7 +135,8 @@ export const taskRepository = {
         t.id, t.display_id, t.title, t.list_id, t.list_status_id,
         t.priority, t.assignee_id, t.status,
         t.plan_start, t.duration_days, t.plan_finish, t.deadline,
-        t.tags, t.created_at,
+        t.tags, t.story_points, t.created_at,
+        t.accumulated_minutes, t.time_estimate_hours,
         a.name AS assignee_name, a.avatar_url AS assignee_avatar,
         ls.name AS status_name, ls.color AS status_color,
         l.name AS list_name
@@ -255,6 +256,9 @@ export const taskRepository = {
     if (data.tags !== undefined)              sets.push(`tags = '${JSON.stringify(data.tags)}'::jsonb`);
     if (data.estimateProgress !== undefined) sets.push(data.estimateProgress != null ? `estimate_progress = ${data.estimateProgress}` : "estimate_progress = NULL");
     if (data.blockedNote !== undefined)       sets.push(data.blockedNote != null ? `blocked_note = '${data.blockedNote.replace(/'/g, "''")}'` : "blocked_note = NULL");
+    if (data.startedAt !== undefined)         sets.push(data.startedAt ? `started_at = '${data.startedAt}'::timestamptz` : "started_at = NULL");
+    if (data.completedAt !== undefined)       sets.push(data.completedAt ? `completed_at = '${data.completedAt}'::timestamptz` : "completed_at = NULL");
+    if (data.accumulatedMinutes !== undefined) sets.push(`accumulated_minutes = accumulated_minutes + ${data.accumulatedMinutes}`);
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       UPDATE tasks SET ${sets.join(", ")}

@@ -19,6 +19,9 @@ import { foldersRouter } from "@/routes/folders.route.ts";
 import { listsRouter }             from "@/routes/lists.route.ts";
 import { extensionRequestsRouter } from "@/routes/extension-requests.route.ts";
 import { searchRouter }            from "@/routes/search.route.ts";
+import { leaveRequestsRouter }     from "@/routes/leave-requests.route.ts";
+import { leaveQuotasRouter }       from "@/routes/leave-quotas.route.ts";
+import { attendanceRouter }        from "@/routes/attendance.route.ts";
 
 export const app = new Hono()
 
@@ -58,6 +61,9 @@ export const app = new Hono()
   .route("/api/lists",              listsRouter)
   .route("/api/extension-requests", extensionRequestsRouter)
   .route("/api/search",             searchRouter)
+  .route("/api/leave-requests",     leaveRequestsRouter)
+  .route("/api/leave-quotas",        leaveQuotasRouter)
+  .route("/api/attendance",         attendanceRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

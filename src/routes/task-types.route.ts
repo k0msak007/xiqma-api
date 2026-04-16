@@ -4,6 +4,7 @@ import { authMiddleware } from "@/middleware/auth.ts";
 import { taskTypeService } from "@/services/task-type.service.ts";
 import { ok, created } from "@/lib/response.ts";
 import {
+  listTaskTypesSchema,
   createTaskTypeSchema,
   updateTaskTypeSchema,
   idParamSchema,
@@ -12,9 +13,10 @@ import {
 export const taskTypesRouter = new Hono()
   .use(authMiddleware)
 
-  // GET /task-types — list all task types
-  .get("/", async (c) => {
-    const taskTypes = await taskTypeService.list();
+  // GET /task-types — list task types, optional ?category=private|organization
+  .get("/", validate("query", listTaskTypesSchema), async (c) => {
+    const params = c.req.valid("query");
+    const taskTypes = await taskTypeService.list(params);
     return ok(c, taskTypes, "ดึงข้อมูล task types สำเร็จ");
   })
 

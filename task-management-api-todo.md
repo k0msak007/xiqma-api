@@ -1296,7 +1296,7 @@
 
 ---
 
-## 🏖️ Phase 4 — HR System
+## 🏖️ Phase 4 — HR System ✅ (Completed)
 
 > ต้องการ Phase 1 (employees, holidays) ก่อน
 
@@ -1311,10 +1311,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ถ้า role = employee → force `employee_id = ctx.user.id`
-- [ ] filter status, year, month ถ้ามี
-- [ ] JOIN employees + reviewer
-- [ ] LIMIT/OFFSET pagination
+- [x] ถ้า role = employee → force `employee_id = ctx.user.id`
+- [x] filter status, year, month ถ้ามี
+- [x] JOIN employees + reviewer
+- [x] LIMIT/OFFSET pagination
 
 ---
 
@@ -1325,8 +1325,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission
-- [ ] query + JOIN
+- [x] ตรวจ permission
+- [x] query + JOIN
 
 ---
 
@@ -1337,12 +1337,12 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ leave_type, start_date, end_date, reason, medical_certificate_url? }`
-- [ ] ตรวจ `start_date <= end_date`
-- [ ] เรียก working-days logic นับวันทำงานจริงในช่วงนั้น (ข้าม weekend + วันหยุด)
-- [ ] query โควตาคงเหลือ → ถ้าไม่พอ → 400 `QUOTA_EXCEEDED`
-- [ ] generate `display_id = 'LR-' + LPAD(nextval, 6, '0')`
-- [ ] INSERT `leave_requests` พร้อม `total_days = working_days, status = 'pending'`
+- [x] validate body: `{ leave_type, start_date, end_date, reason, medical_certificate_url? }`
+- [x] ตรวจ `start_date <= end_date`
+- [x] เรียก working-days logic นับวันทำงานจริงในช่วงนั้น (ข้าม weekend + วันหยุด)
+- [x] query โควตาคงเหลือ → ถ้าไม่พอ → 400 `QUOTA_EXCEEDED`
+- [x] generate `display_id = 'LR-' + LPAD(nextval, 6, '0')`
+- [x] INSERT `leave_requests` พร้อม `total_days = working_days, status = 'pending'`
 
 ---
 
@@ -1353,10 +1353,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission + status ต้องเป็น 'pending'
-- [ ] UPDATE `leave_requests` status = 'approved'
-- [ ] UPDATE `leave_quotas` → `used_days += total_days`
-- [ ] loop INSERT `attendance_logs` ทุกวันทำงานในช่วงลา (ข้าม weekend + วันหยุด) พร้อม `status = 'leave'`
+- [x] ตรวจ permission + status ต้องเป็น 'pending'
+- [x] UPDATE `leave_requests` status = 'approved'
+- [x] UPDATE `leave_quotas` → `used_days += total_days`
+- [x] loop INSERT `attendance_logs` ทุกวันทำงานในช่วงลา (ข้าม weekend + วันหยุด) พร้อม `status = 'leave'`
 
 ---
 
@@ -1367,8 +1367,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ reject_reason }`
-- [ ] UPDATE status = 'rejected' + เหตุผล + reviewer
+- [x] validate body: `{ reject_reason }`
+- [x] UPDATE status = 'rejected' + เหตุผล + reviewer
 
 ---
 
@@ -1379,9 +1379,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ถ้า status = 'pending' → employee ยกเลิกเองได้
-- [ ] ถ้า status = 'approved' → ต้องเป็น admin + UPDATE `leave_quotas` คืน `used_days`
-- [ ] UPDATE status = 'cancelled'
+- [x] ถ้า status = 'pending' → employee ยกเลิกเองได้
+- [x] ถ้า status = 'approved' → ต้องเป็น admin + UPDATE `leave_quotas` คืน `used_days`
+- [x] UPDATE status = 'cancelled'
 
 ---
 
@@ -1396,8 +1396,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `leave_quotas` WHERE `employee_id = ctx.user.id AND year = ?`
-- [ ] return `{ leave_type, quota_days, used_days, remaining_days }` ทุก type
+- [x] query `leave_quotas` WHERE `employee_id = ctx.user.id AND year = ?`
+- [x] return `{ leave_type, quota_days, used_days, remaining_days }` ทุก type
 
 ---
 
@@ -1408,8 +1408,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `leave_quotas JOIN employees`
-- [ ] filter employee_id ถ้ามี, default year = ปีปัจจุบัน
+- [x] query `leave_quotas JOIN employees`
+- [x] filter employee_id ถ้ามี, default year = ปีปัจจุบัน
 
 ---
 
@@ -1420,8 +1420,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ year, leave_type, quota_days }`
-- [ ] INSERT ... ON CONFLICT (employee_id, year, leave_type) DO UPDATE SET quota_days
+- [x] validate body: `{ year, leave_type, quota_days }`
+- [x] INSERT ... ON CONFLICT (employee_id, year, leave_type) DO UPDATE SET quota_days
 
 ---
 
@@ -1436,9 +1436,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่าวันนี้ check-in ไปแล้วไหม → 409 `ALREADY_CHECKED_IN`
-- [ ] เปรียบ `now()::time > '09:00'` → status = 'late' หรือ 'present'
-- [ ] INSERT หรือ UPDATE `attendance_logs` (ON CONFLICT work_date)
+- [x] ตรวจว่าวันนี้ check-in ไปแล้วไหม → 409 `ALREADY_CHECKED_IN`
+- [x] เปรียบ `now()::time > '09:00'` → status = 'late' หรือ 'present'
+- [x] INSERT หรือ UPDATE `attendance_logs` (ON CONFLICT work_date)
 
 ---
 
@@ -1449,10 +1449,10 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่ามี check-in วันนี้ → 400 ถ้าไม่มี
-- [ ] ตรวจว่ายัง check-out ไม่ → 409 ถ้า check-out แล้ว
-- [ ] UPDATE `check_out = now()`
-- [ ] return รวม `total_hours`
+- [x] ตรวจว่ามี check-in วันนี้ → 400 ถ้าไม่มี
+- [x] ตรวจว่ายัง check-out ไม่ → 409 ถ้า check-out แล้ว
+- [x] UPDATE `check_out = now()`
+- [x] return รวม `total_hours`
 
 ---
 
@@ -1463,34 +1463,34 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `attendance_logs` WHERE `employee_id = ctx.user.id AND work_date = CURRENT_DATE`
+- [x] query `attendance_logs` WHERE `employee_id = ctx.user.id AND work_date = CURRENT_DATE`
 
 ---
 
-#### `GET /attendance?employee_id=&month=&year=`
+#### `GET /attendance?employee_id=&month=&year=` ✅
 
 📌 ดูประวัติการเข้างานรายเดือน สำหรับ HR ออกรายงานหรือตรวจสอบ
 👤 HR, admin (เห็นทุกคน) / employee (เห็นของตัวเอง)
 
 🔧 ต้องทำใน handler:
 
-- [ ] ถ้า role = employee → force `employee_id = ctx.user.id`
-- [ ] query JOIN employees, filter month + year
-- [ ] return เรียงตาม work_date DESC
+- [x] ถ้า role = employee → force `employee_id = ctx.user.id`
+- [x] query JOIN employees, filter month + year
+- [x] return เรียงตาม work_date DESC
 
 ---
 
-#### `GET /attendance/team?date=`
+#### `GET /attendance/team?date=` ✅
 
 📌 ดูสถานะการเข้างานของทีม วันที่ระบุ (default วันนี้) สำหรับ manager ดูภาพรวม
 👤 manager
 
 🔧 ต้องทำใน handler:
 
-- [ ] WHERE `employees.manager_id = ctx.user.id`
-- [ ] LEFT JOIN `attendance_logs` วันที่ระบุ
-- [ ] LEFT JOIN `leave_requests` ที่ approved และวันนั้นอยู่ในช่วงลา
-- [ ] return พร้อมสถานะแต่ละคน (present / late / leave / absent)
+- [x] WHERE `employees.manager_id = ctx.user.id`
+- [x] LEFT JOIN `attendance_logs` วันที่ระบุ
+- [x] LEFT JOIN `leave_requests` ที่ approved และวันนั้นอยู่ในช่วงลา
+- [x] return พร้อมสถานะแต่ละคน (present / late / leave / absent)
 
 ---
 

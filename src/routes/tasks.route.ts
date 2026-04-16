@@ -260,6 +260,13 @@ export const tasksRouter = new Hono()
     return ok(c, task, "เสร็จสิ้น task สำเร็จ");
   })
 
+  // GET /tasks/time/running (get all running timers for current user)
+  .get("/time/running", async (c) => {
+    const user = c.get("user");
+    const sessions = await taskService.getRunningSessions(user.userId);
+    return ok(c, sessions, "ดึงข้อมูล session ที่กำลังทำงานสำเร็จ");
+  })
+
   // GET /tasks/:id/time
   .get("/:id/time", validate("param", idParamSchema), async (c) => {
     const { id }     = c.req.valid("param");

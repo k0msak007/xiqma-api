@@ -47,6 +47,7 @@ export const updateTaskSchema = z.object({
   storyPoints:       z.number().int().optional().nullable(),
   mandayEstimate:    z.number().optional().nullable(),
   timeEstimateHours: z.number().optional().nullable(),
+  accumulatedMinutes: z.number().int().optional(),
   planStart:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   durationDays:      z.number().int().min(1).optional().nullable(),
   deadline:          z.string().datetime({ offset: true }).optional().nullable(),
@@ -54,6 +55,8 @@ export const updateTaskSchema = z.object({
   tags:              z.array(z.string()).optional(),
   estimateProgress: z.number().int().min(0).max(100).optional().nullable(),
   blockedNote:       z.string().optional().nullable(),
+  startedAt:         z.string().datetime({ offset: true }).optional().nullable(),
+  completedAt:       z.string().datetime({ offset: true }).optional().nullable(),
 });
 
 export const updateTaskStatusSchema = z.object({

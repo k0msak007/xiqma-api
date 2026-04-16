@@ -21,6 +21,14 @@ export const holidaysRouter = new Hono()
     return ok(c, holidays, "ดึงข้อมูลวันหยุดสำเร็จ");
   })
 
+  // GET /holidays/working-days — count working days in range
+  // ต้องอยู่ก่อน /:id เพื่อป้องกัน Hono จับ "working-days" เป็น param
+  .get("/working-days", validate("query", workingDaysSchema), async (c) => {
+    const { start, end } = c.req.valid("query");
+    const result = await holidayService.countWorkingDays(start, end);
+    return ok(c, result, "นับวันทำงานสำเร็จ");
+  })
+
   // GET /holidays/:id — get holiday by id
   .get("/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
@@ -53,11 +61,4 @@ export const holidaysRouter = new Hono()
     const { id } = c.req.valid("param");
     await holidayService.delete(id);
     return ok(c, null, "ลบวันหยุดสำเร็จ");
-  })
-
-  // GET /holidays/working-days — count working days in range
-  .get("/working-days", validate("query", workingDaysSchema), async (c) => {
-    const { start, end } = c.req.valid("query");
-    const result = await holidayService.countWorkingDays(start, end);
-    return ok(c, result, "นับวันทำงานสำเร็จ");
   });

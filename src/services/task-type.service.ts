@@ -1,10 +1,10 @@
 import { taskTypeRepository } from "@/repositories/task-type.repository.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
-import type { CreateTaskTypeInput, UpdateTaskTypeInput } from "@/validators/task-type.validator.ts";
+import type { CreateTaskTypeInput, UpdateTaskTypeInput, ListTaskTypesInput } from "@/validators/task-type.validator.ts";
 
 export const taskTypeService = {
-  async list() {
-    return taskTypeRepository.findAll();
+  async list(params?: ListTaskTypesInput) {
+    return taskTypeRepository.findAll(params?.category);
   },
 
   async findById(id: string) {

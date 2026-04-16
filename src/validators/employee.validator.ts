@@ -28,7 +28,8 @@ export const updateEmployeeSchema = z.object({
 export const listEmployeesSchema = z.object({
   search:     z.string().optional(),
   department: z.string().optional(),
-  isActive:   z.coerce.boolean().default(true),
+  // ไม่มี default → ไม่ filter ถ้าไม่ระบุ (คืนทุก status)
+  isActive:   z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   page:       z.coerce.number().int().min(1).default(1),
   limit:      z.coerce.number().int().min(1).max(500).default(20),
 });
