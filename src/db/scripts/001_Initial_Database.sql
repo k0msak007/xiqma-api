@@ -1,15 +1,10 @@
 -- ============================================================
 -- UNIFIED SYSTEM — Full Schema SQL
 -- Stack: PostgreSQL (Supabase)
--- Version: 1.1 — fixes applied from DBML review
+-- Version: 1.2 — Phase 3 soft-delete support
 --
--- Changes from v1.0:
---   [FIX-1] employees          + password_hash (auth ต้องใช้)
---   [FIX-2] tasks              + display_order (kanban reorder)
---   [FIX-3] notification_logs  + is_read, read_at (mark read API)
---   [FIX-4] leave_requests     total_days = plain integer (ไม่ใช่ generated)
---   [FIX-5] refresh_tokens     ตารางใหม่ (revoke JWT ได้จริง)
---   [ADD]   indexes เพิ่มเติม + index บน notification_logs, attendance
+-- Changes from v1.1:
+--   [FIX-6] tasks + deleted_at (soft-delete cascade จาก list/folder/space delete)
 -- ============================================================
 
 -- ============================================================
@@ -33,7 +28,7 @@ CREATE TYPE task_status AS ENUM (
 );
 
 CREATE TYPE status_type AS ENUM (
-  'open', 'in_progress', 'review', 'done', 'closed'
+  'open', 'pending', 'in_progress', 'paused', 'review', 'done', 'completed', 'closed', 'cancelled', 'blocked', 'overdue'
 );
 
 CREATE TYPE task_priority AS ENUM (

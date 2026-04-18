@@ -254,7 +254,13 @@ export const taskRepository = {
     if (data.deadline !== undefined)          sets.push(data.deadline ? `deadline = '${data.deadline}'::timestamptz` : "deadline = NULL");
     if (data.description !== undefined)       sets.push(data.description != null ? `description = '${data.description.replace(/'/g, "''")}'` : "description = NULL");
     if (data.tags !== undefined)              sets.push(`tags = '${JSON.stringify(data.tags)}'::jsonb`);
-    if (data.estimateProgress !== undefined) sets.push(data.estimateProgress != null ? `estimate_progress = ${data.estimateProgress}` : "estimate_progress = NULL");
+    if (data.estimateProgress !== undefined) {
+      sets.push(data.estimateProgress != null ? `estimate_progress = ${data.estimateProgress}` : "estimate_progress = NULL");
+      // Auto-set completed_at when estimate_progress = 100
+      if (data.estimateProgress === 100) {
+        sets.push("completed_at = COALESCE(completed_at, now())");
+      }
+    }
     if (data.blockedNote !== undefined)       sets.push(data.blockedNote != null ? `blocked_note = '${data.blockedNote.replace(/'/g, "''")}'` : "blocked_note = NULL");
     if (data.startedAt !== undefined)         sets.push(data.startedAt ? `started_at = '${data.startedAt}'::timestamptz` : "started_at = NULL");
     if (data.completedAt !== undefined)       sets.push(data.completedAt ? `completed_at = '${data.completedAt}'::timestamptz` : "completed_at = NULL");
@@ -269,20 +275,29 @@ export const taskRepository = {
   },
 
   async updateStatus(id: string, data: { listStatusId: string; status?: string }) {
+    // Map frontend status types to database enum values
+    const statusMap: Record<string, string> = {
+      "done": "completed",
+      "closed": "cancelled",
+      "open": "pending",
+    };
+    
+    const mappedStatus = data.status ? (statusMap[data.status] || data.status) : undefined;
+    
     const sets: string[] = [
       `list_status_id = '${data.listStatusId}'::uuid`,
       "updated_at = now()",
     ];
 
-    if (data.status) {
-      sets.push(`status = '${data.status}'`);
-      if (data.status === "in_progress") {
+    if (mappedStatus) {
+      sets.push(`status = '${mappedStatus}'`);
+      if (mappedStatus === "in_progress") {
         sets.push("started_at = COALESCE(started_at, now())");
       }
-      if (data.status === "completed") {
+      if (mappedStatus === "completed") {
         sets.push("completed_at = COALESCE(completed_at, now())");
       }
-      if (data.status === "blocked") {
+      if (mappedStatus === "blocked") {
         sets.push("blocked_at = COALESCE(blocked_at, now())");
       }
     }

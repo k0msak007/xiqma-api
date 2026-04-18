@@ -2,6 +2,7 @@ import { taskRepository } from "@/repositories/task.repository.ts";
 import { listRepository } from "@/repositories/list.repository.ts";
 import { spaceRepository } from "@/repositories/space.repository.ts";
 import { employeeRepository } from "@/repositories/employee.repository.ts";
+import { reportsRepository } from "@/repositories/performance.repository.ts";
 import { supabase, ATTACHMENTS_BUCKET, getSignedAvatarUrl } from "@/lib/supabase.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
 import type {
@@ -95,7 +96,20 @@ export const taskService = {
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${id}`, 404);
     }
-    return taskRepository.updateStatus(id, { listStatusId: data.listStatusId, ...(data.status ? { status: data.status } : {}) });
+    const updated = await taskRepository.updateStatus(id, {
+      listStatusId: data.listStatusId,
+      ...(data.status ? { status: data.status } : {}),
+    });
+
+    // เมื่อ task เสร็จ → อัปเดต weekly report ของ assignee ทันที (fire-and-forget)
+    if (data.status === "completed") {
+      const assigneeId = (task as Record<string, unknown>).assignee_id as string;
+      void reportsRepository
+        .generateWeeklyReport({ employee_id: assigneeId })
+        .catch((e: unknown) => console.error("[points] generate weekly report failed:", e));
+    }
+
+    return updated;
   },
 
   async reorderTasks(data: ReorderTasksInput) {
@@ -262,9 +276,18 @@ export const taskService = {
     await taskRepository.closeRunningSession(taskId, employeeId);
     // Mark task as completed
     const updated = await taskRepository.updateStatus(taskId, {
-      listStatusId: (task as Record<string, unknown>).list_status_id as string ?? (task as Record<string, unknown>).listStatusId as string,
+      listStatusId:
+        (task as Record<string, unknown>).list_status_id as string ??
+        (task as Record<string, unknown>).listStatusId as string,
       status: "completed",
     });
+
+    // อัปเดต weekly report ของ assignee ทันที (fire-and-forget)
+    const assigneeId = (task as Record<string, unknown>).assignee_id as string;
+    void reportsRepository
+      .generateWeeklyReport({ employee_id: assigneeId })
+      .catch((e: unknown) => console.error("[points] generate weekly report failed:", e));
+
     return updated;
   },
 

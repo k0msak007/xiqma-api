@@ -6,6 +6,7 @@ import {
   numeric,
   timestamp,
   date,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { employees } from "./employees.schema.ts";
@@ -29,7 +30,9 @@ export const weeklyReports = pgTable("weekly_reports", {
   prevWeekScore:    numeric("prev_week_score"),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  uniqueEmployeeWeek: unique("weekly_reports_employee_week_unique").on(t.employeeId, t.weekStart),
+}));
 
 export const monthlyHrReports = pgTable("monthly_hr_reports", {
   id:               uuid("id").primaryKey().defaultRandom(),
