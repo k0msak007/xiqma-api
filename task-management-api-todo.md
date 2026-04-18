@@ -1494,7 +1494,7 @@
 
 ---
 
-## 📊 Phase 5 — Performance & Analytics
+## 📊 Phase 5 — Performance & Analytics ✅ (Completed)
 
 > ต้องการ Phase 1, 3, 4 ครบก่อน
 
@@ -1509,7 +1509,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `employee_performance_config JOIN work_schedules` WHERE `employee_id = ctx.user.id`
+- [x] query `employee_performance_config JOIN work_schedules` WHERE `employee_id = ctx.user.id`
 
 ---
 
@@ -1520,8 +1520,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ permission
-- [ ] query เหมือน `/me`
+- [x] ตรวจ permission
+- [x] query เหมือน `/me`
 
 ---
 
@@ -1532,8 +1532,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ employee_id, work_schedule_id, expected_ratio, pointed_work_percent, point_target?, point_period? }`
-- [ ] INSERT ... ON CONFLICT (employee_id) DO UPDATE — upsert
+- [x] validate body: `{ employee_id, work_schedule_id, expected_ratio, pointed_work_percent, point_target?, point_period? }`
+- [x] INSERT ... ON CONFLICT (employee_id) DO UPDATE — upsert
 
 ---
 
@@ -1548,8 +1548,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] aggregate COUNT และ SUM จาก `tasks` ในช่วงเวลานั้น
-- [ ] filter `employee_id` ถ้ามี (employee เห็นแค่ตัวเอง)
+- [x] aggregate COUNT และ SUM จาก `tasks` ในช่วงเวลานั้น
+- [x] filter `employee_id` ถ้ามี (employee เห็นแค่ตัวเอง)
 
 ---
 
@@ -1560,8 +1560,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `weekly_reports` ย้อนหลัง `?weeks=` สัปดาห์
-- [ ] return `week_start, tasks_done, expected_points, actual_points, performance_ratio`
+- [x] query `weekly_reports` ย้อนหลัง `?weeks=` สัปดาห์
+- [x] return `week_start, tasks_done, expected_points, actual_points, performance_ratio`
 
 ---
 
@@ -1572,9 +1572,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query tasks ที่ `status = 'completed'` และมี `time_estimate_hours > 0`
-- [ ] GROUP BY employee คำนวณ `avg_estimate`, `avg_actual`, `accuracy_pct`
-- [ ] filter ตาม period (default เดือนปัจจุบัน)
+- [x] query tasks ที่ `status = 'completed'` และมี `time_estimate_hours > 0`
+- [x] GROUP BY employee คำนวณ `avg_estimate`, `avg_actual`, `accuracy_pct`
+- [x] filter ตาม period (default เดือนปัจจุบัน)
 
 ---
 
@@ -1585,9 +1585,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query tasks ที่ยัง active JOIN list_statuses
-- [ ] GROUP BY status คำนวณ `AVG(days since updated_at)`
-- [ ] ORDER BY avg_days DESC
+- [x] query tasks ที่ยัง active JOIN list_statuses
+- [x] GROUP BY status คำนวณ `AVG(days since updated_at)`
+- [x] ORDER BY avg_days DESC
 
 ---
 
@@ -1598,9 +1598,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query employees ในทีม LEFT JOIN tasks ที่ active
-- [ ] GROUP BY employee นับ `active_tasks`, sum `active_points`, sum `estimate_hours`
-- [ ] ORDER BY active_points DESC
+- [x] query employees ในทีม LEFT JOIN tasks ที่ active
+- [x] GROUP BY employee นับ `active_tasks`, sum `active_points`, sum `estimate_hours`
+- [x] ORDER BY active_points DESC
 
 ---
 
@@ -1615,8 +1615,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `weekly_reports JOIN employees` สำหรับสัปดาห์ที่ระบุ
-- [ ] default `week = DATE_TRUNC('week', now())`
+- [x] query `weekly_reports JOIN employees` สำหรับสัปดาห์ที่ระบุ
+- [x] default `week = DATE_TRUNC('week', now())`
 
 ---
 
@@ -1627,9 +1627,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `weekly_reports JOIN employees` WHERE `employees.manager_id = ctx.user.id`
-- [ ] default สัปดาห์ที่แล้ว (เพราะสัปดาห์นี้ยังไม่จบ)
-- [ ] ORDER BY rank ASC NULLS LAST
+- [x] query `weekly_reports JOIN employees` WHERE `employees.manager_id = ctx.user.id`
+- [x] default สัปดาห์ที่แล้ง (เพราะสัปดาห์นี้ยังไม่จบ)
+- [x] ORDER BY rank ASC NULLS LAST
 
 ---
 
@@ -1640,9 +1640,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] validate body: `{ week_start?, employee_id? }`
-- [ ] aggregate ข้อมูลจาก tasks + attendance ของสัปดาห์นั้น
-- [ ] INSERT หรือ UPSERT `weekly_reports`
+- [x] validate body: `{ week_start?, employee_id? }`
+- [x] aggregate ข้อมูลจาก tasks + attendance ของสัปดาห์นั้น
+- [x] INSERT หรือ UPSERT `weekly_reports`
 
 ---
 
@@ -1653,8 +1653,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `monthly_hr_reports JOIN employees`
-- [ ] filter ตาม employee_id, year, month
+- [x] query `monthly_hr_reports JOIN employees`
+- [x] filter ตาม employee_id, year, month
 
 ---
 
