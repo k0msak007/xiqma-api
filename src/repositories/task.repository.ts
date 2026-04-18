@@ -138,7 +138,7 @@ export const taskRepository = {
         t.tags, t.story_points, t.created_at,
         t.accumulated_minutes, t.time_estimate_hours,
         a.name AS assignee_name, a.avatar_url AS assignee_avatar,
-        ls.name AS status_name, ls.color AS status_color,
+        ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
         l.name AS list_name
       FROM tasks t
       LEFT JOIN list_statuses ls ON t.list_status_id = ls.id

@@ -25,6 +25,13 @@ export const performanceConfigService = {
     return config;
   },
 
+  async listAll(userRole: string) {
+    if (!["admin", "manager"].includes(userRole)) {
+      throw new AppError(ErrorCode.FORBIDDEN, "ไม่มีสิทธิ์ดูรายการทั้งหมด", 403);
+    }
+    return performanceConfigRepository.findAll();
+  },
+
   async getByEmployee(employeeId: string, userId: string, userRole: string) {
     if (userRole === "employee" && employeeId !== userId) {
       throw new AppError(ErrorCode.FORBIDDEN, "ไม่มีสิทธิ์ดู performance config ของคนอื่น", 403);

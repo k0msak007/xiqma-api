@@ -70,6 +70,7 @@ export const performanceConfigRepository = {
         ws.days_per_week,
         ws.hours_per_day,
         ws.hours_per_week,
+        ws.work_days,
         ws.work_start_time,
         ws.work_end_time,
         pc.expected_ratio,
@@ -89,6 +90,36 @@ export const performanceConfigRepository = {
     return rows[0] ?? null;
   },
 
+  async findAll() {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT
+        pc.id,
+        pc.employee_id,
+        e.name            AS employee_name,
+        e.employee_code,
+        pc.work_schedule_id,
+        ws.name           AS work_schedule_name,
+        ws.days_per_week,
+        ws.hours_per_day,
+        ws.hours_per_week,
+        ws.work_days,
+        ws.work_start_time,
+        ws.work_end_time,
+        pc.expected_ratio,
+        pc.pointed_work_percent,
+        pc.non_pointed_work_percent,
+        pc.point_target,
+        pc.point_period,
+        pc.effective_from,
+        pc.created_at,
+        pc.updated_at
+      FROM employee_performance_config pc
+      JOIN employees  e  ON e.id  = pc.employee_id
+      JOIN work_schedules ws ON ws.id = pc.work_schedule_id
+    `));
+    return rows;
+  },
+
   async upsert(data: CreatePerformanceConfigInput) {
     const {
       employee_id,
@@ -103,7 +134,7 @@ export const performanceConfigRepository = {
     const effectiveFromVal = effective_from ?? new Date().toISOString().split("T")[0];
     const pointTargetClause = point_target != null ? `${point_target}` : "NULL";
 
-    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+    await db.execute(sql.raw(`
       INSERT INTO employee_performance_config
         (employee_id, work_schedule_id, expected_ratio, pointed_work_percent,
          point_target, point_period, effective_from)
@@ -119,9 +150,9 @@ export const performanceConfigRepository = {
         point_period          = EXCLUDED.point_period,
         effective_from        = EXCLUDED.effective_from,
         updated_at            = NOW()
-      RETURNING *
     `));
-    return rows[0];
+    // Re-fetch with joined fields (work_schedule_name, work_days, etc.)
+    return await this.findByEmployee(employee_id);
   },
 };
 

@@ -6,6 +6,13 @@ import { performanceConfigService } from "@/services/performance.service.ts";
 
 const performanceConfig = new Hono().use(authMiddleware);
 
+// GET /performance-config — รายการ config ทั้งหมด (admin, manager)
+performanceConfig.get("/", async (c) => {
+  const user = c.get("user");
+  const result = await performanceConfigService.listAll(user.role);
+  return c.json({ success: true, data: result, message: "ดึงรายการ performance config สำเร็จ" });
+});
+
 // GET /performance-config/me — ดู config ของตัวเอง
 performanceConfig.get("/me", async (c) => {
   const user = c.get("user");
