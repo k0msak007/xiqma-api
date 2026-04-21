@@ -5,8 +5,8 @@ import { leaveQuotas } from "@/db/schema/hr.schema.ts";
 import type { CreateEmployeeInput, UpdateEmployeeInput, ListEmployeesInput } from "@/validators/employee.validator.ts";
 
 export const employeeRepository = {
-  async findAll(params: ListEmployeesInput) {
-    const { search, department, isActive, page, limit } = params;
+  async findAll(params: ListEmployeesInput & { managerUserId?: string }) {
+    const { search, department, isActive, page, limit, managerUserId } = params;
     const offset = (page - 1) * limit;
 
     const conditions = [];
@@ -14,6 +14,11 @@ export const employeeRepository = {
     // isActive เป็น optional — ถ้าไม่ระบุ ให้คืนทุก status
     if (isActive !== undefined) {
       conditions.push(eq(employees.isActive, isActive));
+    }
+
+    // จำกัดให้ manager เห็นเฉพาะทีมตัวเอง
+    if (managerUserId) {
+      conditions.push(eq(employees.managerId, managerUserId));
     }
 
     if (department) {
@@ -45,6 +50,7 @@ export const employeeRepository = {
           department:   employees.department,
           isActive:     employees.isActive,
           createdAt:    employees.createdAt,
+          managerId:    employees.managerId,
           roleName:     roles.name,
           positionName: positions.name,
         })

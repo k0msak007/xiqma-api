@@ -19,7 +19,7 @@
 
 ---
 
-## ⚙️ Phase 0 — Infrastructure & Auth
+## ⚙️ Phase 0 — Infrastructure & Auth ✅ (Completed)
 
 > เสร็จก่อนทำอะไรทั้งหมด — ไม่มี Phase นี้ Phase อื่นทำไม่ได้
 
@@ -156,7 +156,7 @@
 
 ---
 
-## 👥 Phase 1 — Master Data
+## 👥 Phase 1 — Master Data ✅ (Completed)
 
 > ข้อมูลพื้นฐานที่ทุก Phase ต้องอ้างอิง — ทำก่อน Phase อื่น
 
@@ -570,7 +570,7 @@
 
 ---
 
-## 🏢 Phase 2 — Workspace Hierarchy
+## 🏢 Phase 2 — Workspace Hierarchy ✅ (Completed)
 
 > ต้องมี Phase 1 (employees) ก่อน
 
@@ -863,7 +863,7 @@
 
 ---
 
-## ✅ Phase 3 — Task Management
+## ✅ Phase 3 — Task Management ✅ (Completed)
 
 > หัวใจของระบบ — ต้องการ Phase 1 + 2 ครบก่อน
 
@@ -1658,7 +1658,7 @@
 
 ---
 
-## 🔧 Phase 6 — Profile, Notifications & Admin
+## 🔧 Phase 6 — Profile, Notifications & Admin ✅ (Completed)
 
 ### Profile
 
@@ -1671,8 +1671,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ดึง `id` จาก `ctx.user.id`
-- [ ] query เหมือน `GET /employees/:id`
+- [x] ดึง `id` จาก `ctx.user.id`
+- [x] query เหมือน `GET /employees/:id`
 
 ---
 
@@ -1683,8 +1683,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] อนุญาตแก้แค่ `name` และ `email` (ไม่ให้แก้ role/department ตัวเอง)
-- [ ] ถ้าแก้ email → ตรวจซ้ำกับคนอื่น
+- [x] อนุญาตแก้แค่ `name` และ `email` (ไม่ให้แก้ role/department ตัวเอง)
+- [x] ถ้าแก้ email → ตรวจซ้ำกับคนอื่น
 
 ---
 
@@ -1695,7 +1695,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] เรียก logic เดียวกับ `GET /tasks/my` โดยใช้ `ctx.user.id` เป็น assignee
+- [x] เรียก logic เดียวกับ `GET /tasks/my` โดยใช้ `ctx.user.id` เป็น assignee
 
 ---
 
@@ -1706,7 +1706,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] เรียก logic เดียวกับ `GET /analytics/performance?employee_id=ctx.user.id`
+- [x] เรียก logic เดียวกับ `GET /analytics/performance?employee_id=ctx.user.id`
 
 ---
 
@@ -1721,9 +1721,9 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] query `notification_logs LEFT JOIN tasks` WHERE `employee_id = ctx.user.id`
-- [ ] filter `?unread=true` → WHERE `is_read = false`
-- [ ] ORDER BY `created_at DESC`
+- [x] query `notification_logs LEFT JOIN tasks` WHERE `employee_id = ctx.user.id`
+- [x] filter `?unread=true` → WHERE `is_read = false`
+- [x] ORDER BY `created_at DESC`
 
 ---
 
@@ -1734,8 +1734,8 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจว่า `employee_id = ctx.user.id` → 403 ถ้าไม่ใช่
-- [ ] UPDATE `is_read = true`
+- [x] ตรวจว่า `employee_id = ctx.user.id` → 403 ถ้าไม่ใช่
+- [x] UPDATE `is_read = true`
 
 ---
 
@@ -1746,7 +1746,7 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] UPDATE `is_read = true` WHERE `employee_id = ctx.user.id AND is_read = false`
+- [x] UPDATE `is_read = true` WHERE `employee_id = ctx.user.id AND is_read = false`
 
 ---
 
@@ -1761,10 +1761,144 @@
 
 🔧 ต้องทำใน handler:
 
-- [ ] ตรวจ role = admin → 403 ถ้าไม่ใช่
-- [ ] query `audit_logs LEFT JOIN employees (actor)` พร้อม filter ทุก param
-- [ ] return พร้อม before_data + after_data (JSON diff)
-- [ ] LIMIT/OFFSET pagination
+- [x] ตรวจ role = admin → 403 ถ้าไม่ใช่
+- [x] query `audit_logs LEFT JOIN employees (actor)` พร้อม filter ทุก param
+- [x] return พร้อม before_data + after_data (JSON diff)
+- [x] LIMIT/OFFSET pagination
+
+---
+
+## ⏰ Phase 8 — Cron Jobs & Scheduled Tasks
+
+> งานที่รันอัตโนมัติตาม schedule — ต้องมี Phase 1, 3, 4 ครบก่อน
+
+### Weekly Reports
+
+---
+
+#### `POST /cron/weekly-reports`
+
+📌 สร้างรายงานประจำสัปดาห์ให้พนักงานทุกคน (ปกติ cron ทำ all แต่มี endpoint สำหรับ manual trigger)
+👤 admin (หรือ cron service)
+
+🔧 ต้องทำใน handler:
+
+- [ ] validate body: `{ week_start?, employee_id? }` — ถ้าไม่ส่ง = สร้างให้ทุกคน
+- [ ] query tasks + attendance ของสัปดาห์ที่ระบุ
+- [ ] aggregate: tasks_done, tasks_overdue, total_manday, actual_hours
+- [ ] คำนวณ expected_points จาก performance_config
+- [ ] คำนวณ actual_points จาก story_points ของ completed tasks
+- [ ] คำนวณ performance_ratio = actual_points / expected_points
+- [ ] INSERT หรือ UPSERT `weekly_reports` ทุก employee
+
+---
+
+#### Schedule
+
+```
+# Cron expression (UTC)
+0 0 * * 1  # Every Monday at 00:00 UTC
+```
+
+---
+
+### Token Cleanup
+
+---
+
+#### `POST /cron/cleanup-tokens`
+
+📌 ลบ refresh tokens ที่หมดอายุหรือถูก revoke แล้ว
+👤 cron service
+
+🔧 ต้องทำใน handler:
+
+- [ ] DELETE FROM `refresh_tokens` WHERE `expires_at < now()` OR `revoked_at IS NOT NULL`
+- [ ] return `{ deleted_count: number }`
+
+---
+
+#### Schedule
+
+```
+# Cron expression (UTC)
+0 3 * * *  # Every day at 03:00 UTC
+```
+
+---
+
+### Notification Reminders
+
+---
+
+#### `POST /cron/notification-reminders`
+
+📌 ส่ง reminder notification สำหรับ deadline ที่ใกล้เข้ามา และ overdue tasks
+👤 cron service
+
+🔧 ต้องทำใน handler:
+
+- [ ] query tasks ที่:
+  - `deadline < now() + 24h` AND `status NOT IN ('completed','cancelled')` → "deadline soon"
+  - `deadline < now()` AND `status NOT IN ('completed','cancelled')` → "overdue"
+- [ ] INSERT `notification_logs` สำหรับ assignee ของ task เหล่านั้น
+- [ ] return `{ notified_count: number }`
+
+---
+
+#### Schedule
+
+```
+# Cron expression (UTC)
+0 9 * * *  # Every day at 09:00 UTC
+```
+
+---
+
+### Daily Summary
+
+---
+
+#### `POST /cron/daily-summary`
+
+📌 สร้าง daily summary record สำหรับวันก่อน
+👤 cron service
+
+🔧 ต้องทำใน handler:
+
+- [ ] query COUNT from `tasks` สำหรับวันก่อน:
+  - `done_count`: status = 'completed' AND `completed_at` ในวันนั้น
+  - `pending_count`: status NOT IN ('completed','cancelled')
+  - `overdue_count`: deadline < now() AND status NOT IN ('completed','cancelled')
+  - `blocked_count`: status = 'blocked'
+- [ ] query AVG score จาก tasks ที่ completed ในวันนั้น
+- [ ] INSERT `daily_summaries` ถ้ายังไม่มี record ของวันนั้น
+
+---
+
+#### Schedule
+
+```
+# Cron expression (UTC)
+0 23 * * *  # Every day at 23:00 UTC
+```
+
+---
+
+### Manual Trigger (Optional)
+
+---
+
+#### `POST /api/cron/run/:job`
+
+📌 Manual trigger สำหรับรัน cron job เฉพาะ (สำหรับ admin ทดสอบหรือ re-run)
+👤 admin
+
+🔧 ต้องทำใน handler:
+
+- [ ] validate `:job` parameter: `weekly-reports`, `cleanup-tokens`, `notification-reminders`, `daily-summary`
+- [ ] switch เรียก function ที่เหมาะสม
+- [ ] return result ของ job นั้น
 
 ---
 

@@ -4,6 +4,7 @@ import {
   analyticsRepository,
   reportsRepository,
 } from "@/repositories/performance.repository.ts";
+import { assertCanAccessEmployee } from "@/repositories/_scope.ts";
 import type {
   CreatePerformanceConfigInput,
   AnalyticsPerformanceQuery,
@@ -66,6 +67,9 @@ export const analyticsService = {
     if (params.start && params.end && params.start > params.end) {
       throw new AppError(ErrorCode.INVALID_DATE_RANGE, "start ต้องน้อยกว่าหรือเท่ากับ end", 400);
     }
+    if (params.employee_id) {
+      await assertCanAccessEmployee(params.employee_id, userRole, userId);
+    }
     return analyticsRepository.getPerformanceSummary({ ...params, userId, userRole });
   },
 
@@ -74,6 +78,9 @@ export const analyticsService = {
       // employee เห็นแค่ของตัวเอง ไม่ว่า query จะส่ง employee_id มาหรือไม่
       return analyticsRepository.getVelocity({ ...params, employee_id: undefined, userId, userRole });
     }
+    if (params.employee_id) {
+      await assertCanAccessEmployee(params.employee_id, userRole, userId);
+    }
     return analyticsRepository.getVelocity({ ...params, userId, userRole });
   },
 
@@ -81,14 +88,17 @@ export const analyticsService = {
     if (userRole === "employee") {
       throw new AppError(ErrorCode.FORBIDDEN, "ฟีเจอร์นี้สำหรับ manager และ admin", 403);
     }
+    if (params.employee_id) {
+      await assertCanAccessEmployee(params.employee_id, userRole, userId);
+    }
     return analyticsRepository.getEfficiency({ ...params, userId, userRole });
   },
 
-  async getBottleneck(userRole: string) {
+  async getBottleneck(userId: string, userRole: string) {
     if (userRole === "employee") {
       throw new AppError(ErrorCode.FORBIDDEN, "ฟีเจอร์นี้สำหรับ manager และ admin", 403);
     }
-    return analyticsRepository.getBottleneck();
+    return analyticsRepository.getBottleneck({ userId, userRole });
   },
 
   async getTeamWorkload(userId: string, userRole: string) {
@@ -103,6 +113,9 @@ export const analyticsService = {
 
 export const reportsService = {
   async getWeeklyReport(params: WeeklyReportQuery, userId: string, userRole: string) {
+    if (params.employee_id) {
+      await assertCanAccessEmployee(params.employee_id, userRole, userId);
+    }
     return reportsRepository.getWeeklyReport({ ...params, userId, userRole });
   },
 
@@ -129,6 +142,13 @@ export const reportsService = {
         userId,
         userRole,
       });
+    }
+    if (userRole === "manager") {
+      // manager เห็นเฉพาะทีมตัวเอง; ถ้าระบุ employee_id ต้องเป็น direct report
+      if (params.employee_id) {
+        await assertCanAccessEmployee(params.employee_id, userRole, userId);
+      }
+      return reportsRepository.getMonthlyHrReport({ ...params, userId, userRole });
     }
     if (!["hr", "admin"].includes(userRole)) {
       throw new AppError(ErrorCode.FORBIDDEN, "ฟีเจอร์นี้สำหรับ HR และ admin", 403);

@@ -23,14 +23,17 @@ export const employeesRouter = new Hono()
   // GET /employees — list with pagination + search (hr/admin/manage_users เท่านั้น)
   .get("/", requirePermission("manage_users"), validate("query", listEmployeesSchema), async (c) => {
     const query = c.req.valid("query");
-    const { rows, total } = await employeeService.list(query);
+    const user = c.get("user");
+    // manager เห็นเฉพาะทีมตัวเอง; admin/hr เห็นทั้งหมด
+    const managerUserId = user.role === "manager" ? user.userId : undefined;
+    const { rows, total } = await employeeService.list({ ...query, managerUserId });
     const { page, limit, buildMeta } = paginate(c);
     return ok(c, rows, "ดึงข้อมูลพนักงานสำเร็จ", buildMeta(total));
   })
 
   // GET /employees/all — list all active employees (any authenticated user)
   .get("/all", async (c) => {
-    const { rows } = await employeeService.list({ isActive: true, limit: 500 });
+    const { rows } = await employeeService.list({ isActive: true, page: 1, limit: 500 });
     return ok(c, { rows }, "ดึงข้อมูลพนักงานสำเร็จ");
   })
 

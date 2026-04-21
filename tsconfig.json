@@ -6,7 +6,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
-    "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,

@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { requestIdMiddleware } from "@/middleware/request-id.ts";
 import { apiRateLimit } from "@/middleware/rate-limit.ts";
 import { errorMiddleware } from "@/middleware/error.ts";
+import { auditMiddleware } from "@/middleware/audit.ts";
 
 import { authRouter } from "@/routes/auth.route.ts";
 import { employeesRouter } from "@/routes/employees.route.ts";
@@ -25,6 +26,10 @@ import { attendanceRouter }        from "@/routes/attendance.route.ts";
 import { performanceConfigRouter } from "@/routes/performance-config.route.ts";
 import { analyticsRouter }         from "@/routes/analytics.route.ts";
 import { reportsRouter }           from "@/routes/reports.route.ts";
+import { profileRouter }           from "@/routes/profile.route.ts";
+import { notificationsRouter }     from "@/routes/notifications.route.ts";
+import { auditLogsRouter }         from "@/routes/audit-logs.route.ts";
+import { healthRouter }            from "@/routes/health.route.ts";
 
 export const app = new Hono()
 
@@ -44,13 +49,10 @@ export const app = new Hono()
     }),
   )
   .use("/api/*", apiRateLimit) // 100 req/min ทุก API endpoint
-
-  // ── Health check ─────────────────────────────────────────────
-  .get("/health", (c) =>
-    c.json({ status: "ok", ts: new Date().toISOString(), version: "1.0.0" }),
-  )
+  .use("/api/*", auditMiddleware) // log mutations to audit_logs
 
   // ── Routes ───────────────────────────────────────────────────
+  .route("/health", healthRouter)
   .route("/api/auth", authRouter)
   .route("/api/employees", employeesRouter)
   .route("/api/tasks", tasksRouter)
@@ -70,6 +72,9 @@ export const app = new Hono()
   .route("/api/performance-config",  performanceConfigRouter)
   .route("/api/analytics",           analyticsRouter)
   .route("/api/reports",             reportsRouter)
+  .route("/api/profile",             profileRouter)
+  .route("/api/notifications",       notificationsRouter)
+  .route("/api/audit-logs",          auditLogsRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

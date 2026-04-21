@@ -75,7 +75,7 @@ analytics.get("/efficiency", async (c) => {
 // หา status columns ที่ task ค้างอยู่นานที่สุด (manager, admin เท่านั้น)
 analytics.get("/bottleneck", async (c) => {
   const user = c.get("user");
-  const result = await analyticsService.getBottleneck(user.role);
+  const result = await analyticsService.getBottleneck(user.userId, user.role);
   return c.json({ success: true, data: result, message: "ดึงข้อมูล bottleneck สำเร็จ" });
 });
 

@@ -69,13 +69,16 @@ export const tasks = pgTable("tasks", {
 });
 
 export const subtasks = pgTable("subtasks", {
-  id:           uuid("id").primaryKey().defaultRandom(),
-  parentTaskId: uuid("parent_task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  title:        text("title").notNull(),
-  isCompleted:  boolean("is_completed").notNull().default(false),
-  assigneeId:   uuid("assignee_id").references(() => employees.id),
-  displayOrder: integer("display_order").notNull().default(0),
-  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  id:         uuid("id").primaryKey().defaultRandom(),
+  taskId:     uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  title:      text("title").notNull(),
+  isDone:     boolean("is_done").notNull().default(false),
+  doneAt:     timestamp("done_at",  { withTimezone: true }),
+  doneBy:     uuid("done_by").references(() => employees.id),
+  orderIndex: integer("order_index").notNull().default(0),
+  createdBy:  uuid("created_by").notNull().references(() => employees.id),
+  createdAt:  timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:  timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const taskTimeSessions = pgTable("task_time_sessions", {
@@ -140,8 +143,9 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
 }));
 
 export const subtasksRelations = relations(subtasks, ({ one }) => ({
-  task:     one(tasks,     { fields: [subtasks.parentTaskId], references: [tasks.id] }),
-  assignee: one(employees, { fields: [subtasks.assigneeId],  references: [employees.id] }),
+  task:      one(tasks,     { fields: [subtasks.taskId],    references: [tasks.id] }),
+  doneByEmp: one(employees, { fields: [subtasks.doneBy],    references: [employees.id] }),
+  creator:   one(employees, { fields: [subtasks.createdBy], references: [employees.id] }),
 }));
 
 export const taskTimeSessionsRelations = relations(taskTimeSessions, ({ one }) => ({

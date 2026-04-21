@@ -146,36 +146,45 @@ export const taskService = {
     return taskRepository.findSubtasks(taskId);
   },
 
-  async createSubtask(taskId: string, data: CreateSubtaskInput) {
+  async createSubtask(taskId: string, userId: string, data: CreateSubtaskInput) {
     const task = await taskRepository.findById(taskId);
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     }
-    return taskRepository.createSubtask(taskId, data);
+    return taskRepository.createSubtask(taskId, data, userId);
   },
 
-  async updateSubtask(taskId: string, subtaskId: string, data: UpdateSubtaskInput) {
+  async updateSubtask(taskId: string, subtaskId: string, userId: string, data: UpdateSubtaskInput) {
     const subtask = await taskRepository.findSubtaskById(subtaskId);
-    if (!subtask || subtask.parentTaskId !== taskId) {
+    if (!subtask || subtask.taskId !== taskId) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ subtask id: ${subtaskId} ใน task นี้`, 404);
     }
-    return taskRepository.updateSubtask(subtaskId, data);
+    return taskRepository.updateSubtask(subtaskId, data, userId);
   },
 
-  async toggleSubtask(taskId: string, subtaskId: string) {
+  async toggleSubtask(taskId: string, subtaskId: string, userId: string) {
     const subtask = await taskRepository.findSubtaskById(subtaskId);
-    if (!subtask || subtask.parentTaskId !== taskId) {
+    if (!subtask || subtask.taskId !== taskId) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ subtask id: ${subtaskId} ใน task นี้`, 404);
     }
-    return taskRepository.toggleSubtask(subtaskId);
+    return taskRepository.toggleSubtask(subtaskId, userId);
   },
 
   async deleteSubtask(taskId: string, subtaskId: string) {
     const subtask = await taskRepository.findSubtaskById(subtaskId);
-    if (!subtask || subtask.parentTaskId !== taskId) {
+    if (!subtask || subtask.taskId !== taskId) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ subtask id: ${subtaskId} ใน task นี้`, 404);
     }
     await taskRepository.deleteSubtask(subtaskId);
+  },
+
+  async reorderSubtasks(taskId: string, orderedIds: string[]) {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
+    }
+    await taskRepository.reorderSubtasks(taskId, orderedIds);
+    return taskRepository.findSubtasks(taskId);
   },
 
   // ── Comments ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db.ts";
+import { buildManagerScopeClause } from "@/repositories/_scope.ts";
 import type {
   CreatePerformanceConfigInput,
   AnalyticsPerformanceQuery,
@@ -176,13 +177,16 @@ export const analyticsRepository = {
     }
 
     // กำหนด employee filter
+    // manager default → ทีมตัวเอง (service layer ได้ verify employee_id แล้วถ้ามี)
     let empCondition: string;
     if (userRole === "employee") {
       empCondition = `t.assignee_id = '${userId}'::uuid`;
     } else if (employee_id) {
       empCondition = `t.assignee_id = '${employee_id}'::uuid`;
+    } else if (userRole === "manager") {
+      empCondition = `t.assignee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
     } else {
-      empCondition = "TRUE"; // admin/manager เห็นทุกคน
+      empCondition = "TRUE"; // admin/hr เห็นทุกคน
     }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -226,6 +230,8 @@ export const analyticsRepository = {
       empCondition = `wr.employee_id = '${userId}'::uuid`;
     } else if (employee_id) {
       empCondition = `wr.employee_id = '${employee_id}'::uuid`;
+    } else if (userRole === "manager") {
+      empCondition = `wr.employee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
     } else {
       empCondition = "TRUE";
     }
@@ -269,6 +275,8 @@ export const analyticsRepository = {
       empCondition = `t.assignee_id = '${userId}'::uuid`;
     } else if (employee_id) {
       empCondition = `t.assignee_id = '${employee_id}'::uuid`;
+    } else if (userRole === "manager") {
+      empCondition = `t.assignee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
     }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -307,7 +315,10 @@ export const analyticsRepository = {
   },
 
   /** หา status columns ที่ task ค้างนานที่สุด */
-  async getBottleneck() {
+  async getBottleneck(params: { userId: string; userRole: string }) {
+    const { userId, userRole } = params;
+    const scope = buildManagerScopeClause(userRole, userId, "t.assignee_id");
+
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       SELECT
         ls.id              AS status_id,
@@ -329,6 +340,7 @@ export const analyticsRepository = {
       JOIN lists l          ON l.id  = ls.list_id
       WHERE ls.type NOT IN ('completed','cancelled')
         AND t.deleted_at IS NULL
+        ${scope}
       GROUP BY ls.id, ls.name, ls.color, ls.type, l.id, l.name
       HAVING COUNT(t.id) > 0
       ORDER BY avg_days_stuck DESC
@@ -634,6 +646,8 @@ export const reportsRepository = {
       empCondition = `mr.employee_id = '${userId}'::uuid`;
     } else if (employee_id) {
       empCondition = `mr.employee_id = '${employee_id}'::uuid`;
+    } else if (userRole === "manager") {
+      empCondition = `mr.employee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
     } else {
       empCondition = "TRUE";
     }

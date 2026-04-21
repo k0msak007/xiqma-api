@@ -68,7 +68,7 @@ export const taskRepository = {
         ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
         a.name AS assignee_name, a.avatar_url AS assignee_avatar,
         cr.name AS creator_name,
-        (SELECT COUNT(*) FROM subtasks WHERE parent_task_id = t.id) AS subtask_count,
+        (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) AS subtask_count,
         (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) AS comment_count,
         (SELECT COUNT(*) FROM task_attachments WHERE task_id = t.id) AS attachment_count
       FROM tasks t
@@ -126,22 +126,28 @@ export const taskRepository = {
   },
 
   async findCalendar(userId: string, role: string, start: string, end: string) {
-    const employeeFilter = (role === "employee")
-      ? `AND t.assignee_id = '${userId}'::uuid`
-      : "";
+    let employeeFilter = "";
+    if (role === "employee") {
+      employeeFilter = `AND t.assignee_id = '${userId}'::uuid`;
+    } else if (role === "manager") {
+      employeeFilter = `AND t.assignee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
+    }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       SELECT
         t.id, t.display_id, t.title, t.list_id, t.list_status_id,
+        t.task_type_id,
         t.priority, t.assignee_id, t.status,
         t.plan_start, t.duration_days, t.plan_finish, t.deadline,
         t.tags, t.story_points, t.created_at,
         t.accumulated_minutes, t.time_estimate_hours,
         a.name AS assignee_name, a.avatar_url AS assignee_avatar,
         ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
+        tt.name AS task_type_name, tt.color AS task_type_color,
         l.name AS list_name
       FROM tasks t
       LEFT JOIN list_statuses ls ON t.list_status_id = ls.id
+      LEFT JOIN task_types tt ON t.task_type_id = tt.id
       LEFT JOIN lists l ON t.list_id = l.id
       LEFT JOIN employees a ON t.assignee_id = a.id
       WHERE (
@@ -173,8 +179,8 @@ export const taskRepository = {
         a.employee_code AS assignee_code,
         cr.id AS creator_id_ref, cr.name AS creator_name, cr.avatar_url AS creator_avatar,
         l.name AS list_name, l.space_id,
-        (SELECT COUNT(*) FROM subtasks WHERE parent_task_id = t.id) AS subtask_count,
-        (SELECT COUNT(*) FROM subtasks WHERE parent_task_id = t.id AND is_completed = true) AS subtask_done_count,
+        (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id) AS subtask_count,
+        (SELECT COUNT(*) FROM subtasks WHERE task_id = t.id AND is_done = true) AS subtask_done_count,
         (SELECT COUNT(*) FROM task_comments WHERE task_id = t.id) AS comment_count,
         (SELECT COUNT(*) FROM task_attachments WHERE task_id = t.id) AS attachment_count
       FROM tasks t
@@ -348,20 +354,23 @@ export const taskRepository = {
   async findSubtasks(taskId: string) {
     return db
       .select({
-        id:           subtasks.id,
-        parentTaskId: subtasks.parentTaskId,
-        title:        subtasks.title,
-        isCompleted:  subtasks.isCompleted,
-        assigneeId:   subtasks.assigneeId,
-        displayOrder: subtasks.displayOrder,
-        createdAt:    subtasks.createdAt,
-        assigneeName: employees.name,
-        assigneeAvatar: employees.avatarUrl,
+        id:            subtasks.id,
+        taskId:        subtasks.taskId,
+        title:         subtasks.title,
+        isDone:        subtasks.isDone,
+        doneAt:        subtasks.doneAt,
+        doneBy:        subtasks.doneBy,
+        orderIndex:    subtasks.orderIndex,
+        createdBy:     subtasks.createdBy,
+        createdAt:     subtasks.createdAt,
+        updatedAt:     subtasks.updatedAt,
+        doneByName:    employees.name,
+        doneByAvatar:  employees.avatarUrl,
       })
       .from(subtasks)
-      .leftJoin(employees, eq(subtasks.assigneeId, employees.id))
-      .where(eq(subtasks.parentTaskId, taskId))
-      .orderBy(asc(subtasks.displayOrder));
+      .leftJoin(employees, eq(subtasks.doneBy, employees.id))
+      .where(eq(subtasks.taskId, taskId))
+      .orderBy(asc(subtasks.orderIndex), asc(subtasks.createdAt));
   },
 
   async findSubtaskById(id: string) {
@@ -370,42 +379,48 @@ export const taskRepository = {
     });
   },
 
-  async createSubtask(taskId: string, data: CreateSubtaskInput) {
+  async createSubtask(taskId: string, data: CreateSubtaskInput, userId: string) {
     const maxOrderResult = await db
-      .select({ max: sql<number>`COALESCE(MAX(display_order), 0)`.mapWith(Number) })
+      .select({ max: sql<number>`COALESCE(MAX(order_index), 0)`.mapWith(Number) })
       .from(subtasks)
-      .where(eq(subtasks.parentTaskId, taskId));
+      .where(eq(subtasks.taskId, taskId));
     const nextOrder = (maxOrderResult[0]?.max ?? 0) + 1;
 
     const [subtask] = await db
       .insert(subtasks)
       .values({
-        parentTaskId: taskId,
-        title:        data.title,
-        assigneeId:   data.assigneeId ?? null,
-        displayOrder: nextOrder,
+        taskId,
+        title:      data.title,
+        orderIndex: nextOrder,
+        createdBy:  userId,
       })
       .returning();
     return subtask;
   },
 
-  async updateSubtask(id: string, data: UpdateSubtaskInput) {
+  async updateSubtask(id: string, data: UpdateSubtaskInput, userId: string) {
+    const setData: Record<string, unknown> = {};
+    if (data.title !== undefined)       setData.title      = data.title;
+    if (data.orderIndex !== undefined)  setData.orderIndex = data.orderIndex;
+    if (data.isDone !== undefined) {
+      setData.isDone = data.isDone;
+      if (data.isDone) setData.doneBy = userId;
+    }
     const [subtask] = await db
       .update(subtasks)
-      .set({
-        ...(data.title        !== undefined && { title:        data.title }),
-        ...(data.assigneeId   !== undefined && { assigneeId:   data.assigneeId }),
-        ...(data.displayOrder !== undefined && { displayOrder: data.displayOrder }),
-      })
+      .set(setData)
       .where(eq(subtasks.id, id))
       .returning();
     return subtask ?? null;
   },
 
-  async toggleSubtask(id: string) {
+  async toggleSubtask(id: string, userId: string) {
+    const current = await db.query.subtasks.findFirst({ where: eq(subtasks.id, id) });
+    if (!current) return null;
+    const nextDone = !current.isDone;
     const [subtask] = await db
       .update(subtasks)
-      .set({ isCompleted: sql`NOT is_completed` })
+      .set({ isDone: nextDone, doneBy: nextDone ? userId : null })
       .where(eq(subtasks.id, id))
       .returning();
     return subtask ?? null;
@@ -413,6 +428,18 @@ export const taskRepository = {
 
   async deleteSubtask(id: string) {
     await db.delete(subtasks).where(eq(subtasks.id, id));
+  },
+
+  async reorderSubtasks(taskId: string, orderedIds: string[]) {
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        const id = orderedIds[i]!;
+        await tx
+          .update(subtasks)
+          .set({ orderIndex: i + 1 })
+          .where(and(eq(subtasks.id, id), eq(subtasks.taskId, taskId)));
+      }
+    });
   },
 
   // ── Comments ──────────────────────────────────────────────────────────────────
@@ -621,6 +648,10 @@ export const taskRepository = {
     let whereClause = "1=1";
     if (status) whereClause += ` AND er.status = '${status}'`;
     if (role === "employee" && userId) whereClause += ` AND er.requested_by = '${userId}'::uuid`;
+    if (role === "manager" && userId) {
+      // manager เห็น extension ของ task ที่ assignee อยู่ในทีม
+      whereClause += ` AND t.assignee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
+    }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       SELECT
@@ -753,9 +784,12 @@ export const taskRepository = {
     const results: { type: string; items: unknown[] }[] = [];
 
     if (types.includes("task")) {
-      const employeeFilter = role === "employee"
-        ? `AND t.assignee_id = '${userId}'::uuid`
-        : "";
+      let employeeFilter = "";
+      if (role === "employee") {
+        employeeFilter = `AND t.assignee_id = '${userId}'::uuid`;
+      } else if (role === "manager") {
+        employeeFilter = `AND t.assignee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid)`;
+      }
 
       const rows = await db.execute<Record<string, unknown>>(sql.raw(`
         SELECT

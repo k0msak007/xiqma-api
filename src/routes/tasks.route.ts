@@ -14,6 +14,7 @@ import {
   reorderTasksSchema,
   createSubtaskSchema,
   updateSubtaskSchema,
+  reorderSubtasksSchema,
   createCommentSchema,
   updateCommentSchema,
   createExtensionRequestSchema,
@@ -135,7 +136,8 @@ export const tasksRouter = new Hono()
   .post("/:id/subtasks", validate("param", idParamSchema), validate("json", createSubtaskSchema), async (c) => {
     const { id }   = c.req.valid("param");
     const data     = c.req.valid("json");
-    const subtask  = await taskService.createSubtask(id, data);
+    const user     = c.get("user");
+    const subtask  = await taskService.createSubtask(id, user.userId, data);
     return created(c, subtask, "สร้าง subtask สำเร็จ");
   })
 
@@ -143,14 +145,16 @@ export const tasksRouter = new Hono()
   .put("/:id/subtasks/:subtaskId", validate("param", subtaskParamSchema), validate("json", updateSubtaskSchema), async (c) => {
     const { id, subtaskId } = c.req.valid("param");
     const data              = c.req.valid("json");
-    const subtask           = await taskService.updateSubtask(id, subtaskId, data);
+    const user              = c.get("user");
+    const subtask           = await taskService.updateSubtask(id, subtaskId, user.userId, data);
     return ok(c, subtask, "แก้ไข subtask สำเร็จ");
   })
 
   // PATCH /tasks/:id/subtasks/:subtaskId/toggle
   .patch("/:id/subtasks/:subtaskId/toggle", validate("param", subtaskParamSchema), async (c) => {
     const { id, subtaskId } = c.req.valid("param");
-    const subtask           = await taskService.toggleSubtask(id, subtaskId);
+    const user              = c.get("user");
+    const subtask           = await taskService.toggleSubtask(id, subtaskId, user.userId);
     return ok(c, subtask, "toggle subtask สำเร็จ");
   })
 
@@ -159,6 +163,14 @@ export const tasksRouter = new Hono()
     const { id, subtaskId } = c.req.valid("param");
     await taskService.deleteSubtask(id, subtaskId);
     return ok(c, null, "ลบ subtask สำเร็จ");
+  })
+
+  // PATCH /tasks/:id/subtasks/reorder
+  .patch("/:id/subtasks/reorder", validate("param", idParamSchema), validate("json", reorderSubtasksSchema), async (c) => {
+    const { id }       = c.req.valid("param");
+    const { orderedIds } = c.req.valid("json");
+    const result       = await taskService.reorderSubtasks(id, orderedIds);
+    return ok(c, result, "จัดลำดับ subtask สำเร็จ");
   })
 
   // ── Comments ──────────────────────────────────────────────────────────────────

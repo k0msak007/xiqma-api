@@ -1,5 +1,6 @@
 import { AppError, ErrorCode } from "@/lib/errors.ts";
 import { leaveRepository, leaveQuotaRepository, attendanceRepository, calculateWorkingDays } from "@/repositories/leave.repository.ts";
+import { assertCanAccessEmployee } from "@/repositories/_scope.ts";
 import type {
   CreateLeaveRequestInput,
   ApproveLeaveRequestInput,
@@ -13,21 +14,35 @@ import type {
 export const leaveService = {
   // GET /leave-requests
   async list(params: {
-    employeeId?: string;
-    status?: string;
-    year?: number;
-    month?: number;
-    page?: number;
-    limit?: number;
+    employeeId: string | undefined;
+    status: string | undefined;
+    year: number | undefined;
+    month: number | undefined;
+    page: number | undefined;
+    limit: number | undefined;
     userId: string;
     userRole: string;
   }) {
     // If employee, only see own requests
     const effectiveEmployeeId = params.userRole === "employee" ? params.userId : params.employeeId;
-    
+
+    // manager ที่ขอดู employee_id เจาะจง ต้องเป็น direct report
+    if (params.userRole === "manager" && params.employeeId) {
+      await assertCanAccessEmployee(params.employeeId, params.userRole, params.userId);
+    }
+
+    // manager ไม่ระบุ employee_id → จำกัดให้เห็นเฉพาะทีมตัวเอง
+    const managerUserId =
+      params.userRole === "manager" && !params.employeeId ? params.userId : undefined;
+
     return leaveRepository.findAll({
-      ...params,
       employeeId: effectiveEmployeeId,
+      status: params.status,
+      year: params.year,
+      month: params.month,
+      page: params.page,
+      limit: params.limit,
+      managerUserId,
     });
   },
 
@@ -41,6 +56,11 @@ export const leaveService = {
     // Employee can only view their own
     if (userRole === "employee" && leave.employeeId !== userId) {
       throw new AppError(ErrorCode.FORBIDDEN, "ไม่มีสิทธิ์ดูการลานี้", 403);
+    }
+
+    // Manager: ต้องเป็นของ direct report เท่านั้น
+    if (userRole === "manager" && leave.employeeId) {
+      await assertCanAccessEmployee(leave.employeeId, userRole, userId);
     }
 
     return leave;
@@ -195,7 +215,7 @@ export const leaveQuotaService = {
 export const attendanceService = {
   // POST /attendance/check-in
   async checkIn(userId: string) {
-    const today = new Date().toISOString().split("T")[0];
+    const today: string = new Date().toISOString().split("T")[0] as string;
     
     // Check if already checked in
     const existing = await attendanceRepository.findByEmployeeAndDate(userId, today);
@@ -213,7 +233,7 @@ export const attendanceService = {
 
   // POST /attendance/check-out
   async checkOut(userId: string) {
-    const today = new Date().toISOString().split("T")[0];
+    const today: string = new Date().toISOString().split("T")[0] as string;
     
     const existing = await attendanceRepository.findByEmployeeAndDate(userId, today);
     if (!existing?.checkIn) {
@@ -237,9 +257,9 @@ export const attendanceService = {
     const effectiveEmployeeId = params.userRole === "employee" ? params.userId : params.employeeId;
     
     return attendanceRepository.findAll({
-      employeeId: effectiveEmployeeId,
-      month: params.month,
-      year: params.year,
+      employeeId: effectiveEmployeeId ?? undefined,
+      month: params.month ?? undefined,
+      year: params.year ?? undefined,
     });
   },
 

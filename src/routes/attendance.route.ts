@@ -39,7 +39,7 @@ attendance.get("/", async (c) => {
   const yearNum = year ? parseInt(year) : undefined;
 
   const result = await attendanceService.list({
-    employeeId: employee_id,
+    employeeId: employee_id || undefined,
     month: monthNum,
     year: yearNum,
     userId: user.userId,
@@ -58,9 +58,9 @@ attendance.get("/team", async (c) => {
   }
 
   const { date } = c.req.query();
-  const targetDate = date || new Date().toISOString().split("T")[0];
+  const targetDate: string = date !== undefined ? date : (new Date().toISOString().split("T")[0] as string);
 
-  const result = await attendanceService.getTeamAttendance(targetDate, user.userId);
+  const result = await attendanceService.getTeamAttendance(targetDate, user.userId as string);
   return c.json({ success: true, data: result, message: "ดึงการเข้างานของทีมสำเร็จ" });
 });
 

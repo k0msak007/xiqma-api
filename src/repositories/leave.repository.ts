@@ -1,4 +1,4 @@
-import { eq, and, sql, asc, desc } from "drizzle-orm";
+import { eq, and, gte, lt, sql, asc, desc, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db.ts";
 import { leaveRequests, leaveQuotas, attendanceLogs } from "@/db/schema/hr.schema.ts";
 import { employees } from "@/db/schema/employees.schema.ts";
@@ -8,18 +8,24 @@ import { companyHolidays } from "@/db/schema/hr.schema.ts";
 
 export const leaveRepository = {
   async findAll(params: {
-    employeeId?: string;
-    status?: string;
-    year?: number;
-    month?: number;
-    page?: number;
-    limit?: number;
+    employeeId: string | undefined;
+    status: string | undefined;
+    year: number | undefined;
+    month: number | undefined;
+    page: number | undefined;
+    limit: number | undefined;
+    managerUserId?: string | undefined;
   }) {
-    const { employeeId, status, year, month, page = 1, limit = 20 } = params;
+    const { employeeId, status, year, month, page = 1, limit = 20, managerUserId } = params;
     const offset = (page - 1) * limit;
 
     const conditions = [];
     if (employeeId) conditions.push(eq(leaveRequests.employeeId, employeeId));
+    if (managerUserId) {
+      conditions.push(
+        sql`${leaveRequests.employeeId} IN (SELECT id FROM employees WHERE manager_id = ${managerUserId}::uuid)`,
+      );
+    }
     if (status) conditions.push(eq(leaveRequests.status, status as any));
     if (year) conditions.push(sql`EXTRACT(YEAR FROM ${leaveRequests.startDate}) = ${year}`);
     if (month) conditions.push(sql`EXTRACT(MONTH FROM ${leaveRequests.startDate}) = ${month}`);
@@ -80,7 +86,7 @@ export const leaveRepository = {
       })
       .from(leaveRequests)
       .leftJoin(employees, eq(leaveRequests.employeeId, employees.id))
-      .leftJoin(employees.as("r"), eq(leaveRequests.approvedBy, sql`r.id`))
+      .leftJoin(employees as any, eq(leaveRequests.approvedBy, sql`r.id`))
       .where(eq(leaveRequests.id, id));
     return row ?? null;
   },
@@ -107,8 +113,8 @@ export const leaveRepository = {
         startDate: data.startDate,
         endDate: data.endDate,
         totalDays: data.totalDays,
-        reason: data.reason,
-        medicalCertificateUrl: data.medicalCertificateUrl,
+        reason: data.reason ?? null,
+        medicalCertificateUrl: data.medicalCertificateUrl ?? null,
         status: "pending",
       })
       .returning();
@@ -294,7 +300,6 @@ export const attendanceRepository = {
         set: {
           checkIn: new Date(),
           status: isLate ? "late" : "present",
-          updatedAt: new Date(),
         },
       })
       .returning();
@@ -306,7 +311,6 @@ export const attendanceRepository = {
       .update(attendanceLogs)
       .set({
         checkOut: new Date(),
-        updatedAt: new Date(),
       })
       .where(and(
         eq(attendanceLogs.employeeId, employeeId),

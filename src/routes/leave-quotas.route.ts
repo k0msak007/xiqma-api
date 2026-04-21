@@ -22,7 +22,7 @@ leaveQuotas.get("/", async (c) => {
   const { employee_id, year } = c.req.query();
 
   const quotas = await leaveQuotaService.list({
-    employeeId: employee_id,
+    employeeId: employee_id || undefined,
     year: year ? parseInt(year) : undefined,
     userRole: user.role,
   });
@@ -31,11 +31,15 @@ leaveQuotas.get("/", async (c) => {
 });
 
 // PUT /leave-quotas/:employee_id - Update leave quota
-leaveQuotas.put("/:employeeId", validate("param", idParamSchema), validate("json", updateLeaveQuotaSchema), async (c) => {
+leaveQuotas.put("/:employeeId", async (c) => {
   const user = c.get("user");
-  const { employeeId } = c.req.valid("param");
-  const data = c.req.valid("json");
-
+  const { employeeId } = c.req.param();
+  
+  if (!employeeId || employeeId === ":employeeId") {
+    throw new Error("Invalid employeeId parameter");
+  }
+  
+  const data = await c.req.json();
   const quota = await leaveQuotaService.update(employeeId, data, user.role);
   return c.json({ success: true, data: quota, message: "อัปเดตโควตาการลาสำเร็จ" });
 });

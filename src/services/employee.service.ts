@@ -6,7 +6,7 @@ import { supabase, AVATARS_BUCKET } from "@/lib/supabase.ts";
 import type { CreateEmployeeInput, UpdateEmployeeInput, ListEmployeesInput, ChangePasswordInput } from "@/validators/employee.validator.ts";
 
 export const employeeService = {
-  async list(params: ListEmployeesInput) {
+  async list(params: ListEmployeesInput & { managerUserId?: string }) {
     return employeeRepository.findAll(params);
   },
 

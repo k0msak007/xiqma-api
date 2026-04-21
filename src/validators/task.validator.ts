@@ -72,14 +72,17 @@ export const reorderTasksSchema = z.object({
 
 // Subtask
 export const createSubtaskSchema = z.object({
-  title:      z.string().min(1),
-  assigneeId: z.string().uuid().optional(),
+  title: z.string().min(1),
 });
 
 export const updateSubtaskSchema = z.object({
-  title:        z.string().min(1).optional(),
-  assigneeId:   z.string().uuid().optional().nullable(),
-  displayOrder: z.number().int().optional(),
+  title:      z.string().min(1).optional(),
+  isDone:     z.boolean().optional(),
+  orderIndex: z.number().int().optional(),
+});
+
+export const reorderSubtasksSchema = z.object({
+  orderedIds: z.array(z.string().uuid()).min(1),
 });
 
 // Comment
@@ -114,6 +117,7 @@ export type UpdateTaskStatusInput  = z.infer<typeof updateTaskStatusSchema>;
 export type ReorderTasksInput      = z.infer<typeof reorderTasksSchema>;
 export type CreateSubtaskInput     = z.infer<typeof createSubtaskSchema>;
 export type UpdateSubtaskInput     = z.infer<typeof updateSubtaskSchema>;
+export type ReorderSubtasksInput   = z.infer<typeof reorderSubtasksSchema>;
 export type CreateCommentInput     = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput     = z.infer<typeof updateCommentSchema>;
 export type CreateExtensionInput   = z.infer<typeof createExtensionRequestSchema>;

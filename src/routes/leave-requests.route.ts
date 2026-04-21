@@ -18,8 +18,8 @@ leaveRequests.get("/", async (c) => {
   const { employee_id, status, year, month, page, limit } = c.req.query();
 
   const result = await leaveService.list({
-    employeeId: employee_id,
-    status,
+    employeeId: employee_id || undefined,
+    status: status || undefined,
     year: year ? parseInt(year) : undefined,
     month: month ? parseInt(month) : undefined,
     page: page ? parseInt(page) : 1,
