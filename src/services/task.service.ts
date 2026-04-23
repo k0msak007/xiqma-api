@@ -233,7 +233,13 @@ export const taskService = {
     if (comment.authorId !== userId) {
       throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่มีสิทธิ์แก้ไข comment นี้", 403);
     }
-    return taskRepository.updateComment(commentId, data);
+    const updated = await taskRepository.updateComment(commentId, data);
+    return {
+      ...updated,
+      authorAvatar: updated.authorAvatar
+        ? await getSignedAvatarUrl(updated.authorAvatar)
+        : null,
+    };
   },
 
   async deleteComment(taskId: string, commentId: string, userId: string, role: string) {
@@ -310,6 +316,31 @@ export const taskService = {
 
   async getRunningSessions(employeeId: string) {
     return taskRepository.findRunningSession(employeeId);
+  },
+
+  async logTimeManual(taskId: string, employeeId: string, data: { durationMin: number; note?: string; startedAt?: string }) {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
+    }
+    return taskRepository.logTimeManual(
+      taskId,
+      employeeId,
+      data.durationMin,
+      data.note,
+      data.startedAt ? new Date(data.startedAt) : undefined,
+    );
+  },
+
+  async deleteTimeSession(taskId: string, sessionId: string, userId: string, role: string) {
+    const session = await taskRepository.findTimeSessionById(sessionId);
+    if (!session || session.taskId !== taskId) {
+      throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ time session id: ${sessionId}`, 404);
+    }
+    if (session.employeeId !== userId && role !== "admin") {
+      throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่มีสิทธิ์ลบ session นี้", 403);
+    }
+    await taskRepository.deleteTimeSession(sessionId);
   },
 
   // ── Attachments ───────────────────────────────────────────────────────────────
@@ -451,5 +482,23 @@ export const taskService = {
 
   async search(q: string, types: string[], limit: number, userId: string, role: string) {
     return taskRepository.search(q, types, limit, userId, role);
+  },
+
+  // ── Daily time (timesheet) ────────────────────────────────────────────────────
+
+  async getDailyTime(start: string, end: string, userId: string, role: string) {
+    return taskRepository.getDailyTimeTotals({ start, end, userId, role });
+  },
+
+  // ── Rework ────────────────────────────────────────────────────────────────────
+
+  async listReworkEvents(taskId: string) {
+    return taskRepository.listReworkEvents(taskId);
+  },
+
+  async createReworkEvent(taskId: string, userId: string, data: { toStatusId: string; reason: string }) {
+    const task = await taskRepository.findById(taskId);
+    if (!task) throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
+    return taskRepository.createReworkEvent(taskId, userId, data.toStatusId, data.reason);
   },
 };

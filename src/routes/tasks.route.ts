@@ -18,7 +18,11 @@ import {
   createCommentSchema,
   updateCommentSchema,
   createExtensionRequestSchema,
+  logTimeSchema,
+  createReworkSchema,
 } from "@/validators/task.validator.ts";
+
+const timeSessionParamSchema = z.object({ id: z.string().uuid(), sessionId: z.string().uuid() });
 
 const idParamSchema         = z.object({ id: z.string().uuid() });
 const subtaskParamSchema    = z.object({ id: z.string().uuid(), subtaskId: z.string().uuid() });
@@ -272,6 +276,14 @@ export const tasksRouter = new Hono()
     return ok(c, task, "เสร็จสิ้น task สำเร็จ");
   })
 
+  // GET /tasks/time/daily?start=YYYY-MM-DD&end=YYYY-MM-DD
+  .get("/time/daily", validate("query", calendarQuerySchema), async (c) => {
+    const { start, end } = c.req.valid("query");
+    const user           = c.get("user");
+    const rows           = await taskService.getDailyTime(start, end, user.userId, user.role);
+    return ok(c, rows, "ดึงข้อมูล daily time สำเร็จ");
+  })
+
   // GET /tasks/time/running (get all running timers for current user)
   .get("/time/running", async (c) => {
     const user = c.get("user");
@@ -286,6 +298,23 @@ export const tasksRouter = new Hono()
     return ok(c, sessions, "ดึงข้อมูล time sessions สำเร็จ");
   })
 
+  // POST /tasks/:id/time/log — manual time entry
+  .post("/:id/time/log", validate("param", idParamSchema), validate("json", logTimeSchema), async (c) => {
+    const { id }  = c.req.valid("param");
+    const data    = c.req.valid("json");
+    const user    = c.get("user");
+    const session = await taskService.logTimeManual(id, user.userId, data);
+    return created(c, session, "บันทึกเวลาสำเร็จ");
+  })
+
+  // DELETE /tasks/:id/time/:sessionId
+  .delete("/:id/time/:sessionId", validate("param", timeSessionParamSchema), async (c) => {
+    const { id, sessionId } = c.req.valid("param");
+    const user              = c.get("user");
+    await taskService.deleteTimeSession(id, sessionId, user.userId, user.role);
+    return ok(c, null, "ลบ session สำเร็จ");
+  })
+
   // ── Extension Requests (per task) ────────────────────────────────────────────
 
   // GET /tasks/:id/extension-requests
@@ -293,6 +322,27 @@ export const tasksRouter = new Hono()
     const { id }     = c.req.valid("param");
     const extensions = await taskService.listExtensionRequests(id);
     return ok(c, extensions, "ดึงข้อมูล extension requests สำเร็จ");
+  })
+
+  // ── Rework ────────────────────────────────────────────────────────────────────
+
+  // GET /tasks/:id/rework
+  .get("/:id/rework", validate("param", idParamSchema), async (c) => {
+    const { id }  = c.req.valid("param");
+    const events  = await taskService.listReworkEvents(id);
+    return ok(c, events, "ดึงข้อมูล rework สำเร็จ");
+  })
+
+  // POST /tasks/:id/rework — admin/manager only
+  .post("/:id/rework", validate("param", idParamSchema), validate("json", createReworkSchema), async (c) => {
+    const { id }  = c.req.valid("param");
+    const data    = c.req.valid("json");
+    const user    = c.get("user");
+    if (user.role !== "admin" && user.role !== "manager") {
+      return c.json({ success: false, message: "ไม่มีสิทธิ์ส่งกลับแก้ไข", error: "FORBIDDEN" }, 403);
+    }
+    const event = await taskService.createReworkEvent(id, user.userId, data);
+    return created(c, event, "ส่งกลับแก้ไขสำเร็จ");
   })
 
   // POST /tasks/:id/extension-requests

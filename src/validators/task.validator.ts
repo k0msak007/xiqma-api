@@ -85,6 +85,13 @@ export const reorderSubtasksSchema = z.object({
   orderedIds: z.array(z.string().uuid()).min(1),
 });
 
+// Time tracking — manual log
+export const logTimeSchema = z.object({
+  durationMin: z.number().int().min(1).max(24 * 60),
+  note:        z.string().optional(),
+  startedAt:   z.string().datetime({ offset: true }).optional(),
+});
+
 // Comment
 export const createCommentSchema = z.object({
   commentText: z.string().min(1),
@@ -104,6 +111,13 @@ export const rejectExtensionSchema = z.object({
   rejectReason: z.string().min(1),
 });
 
+// Rework
+export const createReworkSchema = z.object({
+  toStatusId: z.string().uuid(),
+  reason:     z.string().min(1),
+});
+export type CreateReworkInput = z.infer<typeof createReworkSchema>;
+
 // Search
 export const searchQuerySchema = z.object({
   q:     z.string().min(2),
@@ -118,6 +132,7 @@ export type ReorderTasksInput      = z.infer<typeof reorderTasksSchema>;
 export type CreateSubtaskInput     = z.infer<typeof createSubtaskSchema>;
 export type UpdateSubtaskInput     = z.infer<typeof updateSubtaskSchema>;
 export type ReorderSubtasksInput   = z.infer<typeof reorderSubtasksSchema>;
+export type LogTimeInput           = z.infer<typeof logTimeSchema>;
 export type CreateCommentInput     = z.infer<typeof createCommentSchema>;
 export type UpdateCommentInput     = z.infer<typeof updateCommentSchema>;
 export type CreateExtensionInput   = z.infer<typeof createExtensionRequestSchema>;

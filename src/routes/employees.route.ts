@@ -31,10 +31,34 @@ export const employeesRouter = new Hono()
     return ok(c, rows, "ดึงข้อมูลพนักงานสำเร็จ", buildMeta(total));
   })
 
-  // GET /employees/all — list all active employees (any authenticated user)
+  // GET /employees/all — list active employees (scoped by role)
+  //   admin/hr: ทุกคน
+  //   manager : เฉพาะลูกน้องในทีม + ตัวเอง
+  //   employee: เฉพาะตัวเอง
   .get("/all", async (c) => {
-    const { rows } = await employeeService.list({ isActive: true, page: 1, limit: 500 });
-    return ok(c, { rows }, "ดึงข้อมูลพนักงานสำเร็จ");
+    const user = c.get("user");
+    const managerUserId = user.role === "manager" ? user.userId : undefined;
+    const { rows } = await employeeService.list({
+      isActive: true,
+      page: 1,
+      limit: 500,
+      managerUserId,
+    });
+
+    let scoped = rows;
+    if (user.role === "manager") {
+      // service.list กรองเฉพาะลูกน้อง → เพิ่มตัว manager เองเข้าไปด้วย
+      if (!scoped.find((e: any) => e.id === user.userId)) {
+        try {
+          const me = await employeeService.findById(user.userId);
+          if (me) scoped = [me as any, ...scoped];
+        } catch { /* ignore */ }
+      }
+    } else if (user.role === "employee") {
+      scoped = scoped.filter((e: any) => e.id === user.userId);
+    }
+
+    return ok(c, { rows: scoped }, "ดึงข้อมูลพนักงานสำเร็จ");
   })
 
   // GET /employees/:id — get employee by id

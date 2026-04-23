@@ -62,6 +62,8 @@ export const tasks = pgTable("tasks", {
   estimateProgress:  integer("estimate_progress").notNull().default(0),
   blockedNote:        text("blocked_note"),
   blockedAt:          timestamp("blocked_at", { withTimezone: true }),
+  reworkCount:        integer("rework_count").notNull().default(0),
+  lastReworkedAt:     timestamp("last_reworked_at", { withTimezone: true }),
   tags:               jsonb("tags").notNull().default([]),
   createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:          timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -110,6 +112,18 @@ export const taskAttachments = pgTable("task_attachments", {
   fileDescription: text("file_description"),
   fileSizeBytes:   numeric("file_size_bytes"),
   mimeType:        text("mime_type"),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const taskReworkEvents = pgTable("task_rework_events", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  taskId:          uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  fromStatusId:    uuid("from_status_id").references(() => listStatuses.id),
+  toStatusId:      uuid("to_status_id").references(() => listStatuses.id),
+  fromStatusName:  text("from_status_name"),
+  toStatusName:    text("to_status_name"),
+  reason:          text("reason").notNull(),
+  requestedBy:     uuid("requested_by").notNull().references(() => employees.id),
   createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -181,5 +195,7 @@ export type TaskComment            = typeof taskComments.$inferSelect;
 export type NewTaskComment         = typeof taskComments.$inferInsert;
 export type TaskAttachment         = typeof taskAttachments.$inferSelect;
 export type NewTaskAttachment      = typeof taskAttachments.$inferInsert;
+export type TaskReworkEvent        = typeof taskReworkEvents.$inferSelect;
+export type NewTaskReworkEvent     = typeof taskReworkEvents.$inferInsert;
 export type DueExtensionRequest    = typeof dueExtensionRequests.$inferSelect;
 export type NewDueExtensionRequest = typeof dueExtensionRequests.$inferInsert;

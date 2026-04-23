@@ -7,6 +7,7 @@ import {
   taskComments,
   taskAttachments,
   dueExtensionRequests,
+  taskReworkEvents,
 } from "@/db/schema/tasks.schema.ts";
 import { employees } from "@/db/schema/employees.schema.ts";
 import { lists, listStatuses } from "@/db/schema/workspace.schema.ts";
@@ -579,6 +580,59 @@ export const taskRepository = {
     return durationMin;
   },
 
+  async logTimeManual(taskId: string, employeeId: string, durationMin: number, note?: string, startedAt?: Date) {
+    const start = startedAt ?? new Date();
+    const end   = new Date(start.getTime() + durationMin * 60_000);
+    const [session] = await db
+      .insert(taskTimeSessions)
+      .values({
+        taskId,
+        employeeId,
+        startedAt: start,
+        endedAt:   end,
+        durationMin,
+        note:      note ?? null,
+      })
+      .returning();
+
+    await db.execute(sql.raw(`
+      UPDATE tasks
+      SET
+        accumulated_minutes = accumulated_minutes + ${durationMin},
+        actual_hours        = ROUND((accumulated_minutes + ${durationMin})::numeric / 60, 2),
+        updated_at          = now()
+      WHERE id = '${taskId}'::uuid
+    `));
+
+    return session;
+  },
+
+  async findTimeSessionById(id: string) {
+    return db.query.taskTimeSessions.findFirst({
+      where: eq(taskTimeSessions.id, id),
+    });
+  },
+
+  async deleteTimeSession(id: string) {
+    const session = await db.query.taskTimeSessions.findFirst({
+      where: eq(taskTimeSessions.id, id),
+    });
+    if (!session) return null;
+    const dur = session.durationMin ?? 0;
+    await db.delete(taskTimeSessions).where(eq(taskTimeSessions.id, id));
+    if (dur > 0) {
+      await db.execute(sql.raw(`
+        UPDATE tasks
+        SET
+          accumulated_minutes = GREATEST(0, accumulated_minutes - ${dur}),
+          actual_hours        = ROUND(GREATEST(0, accumulated_minutes - ${dur})::numeric / 60, 2),
+          updated_at          = now()
+        WHERE id = '${session.taskId}'::uuid
+      `));
+    }
+    return session;
+  },
+
   async findTimeSessions(taskId: string) {
     return db
       .select({
@@ -843,5 +897,120 @@ export const taskRepository = {
     }
 
     return results;
+  },
+
+  // ── Daily time aggregation (for timesheet) ──────────────────────────────────
+
+  async getDailyTimeTotals(params: {
+    start: string; // yyyy-MM-dd
+    end:   string; // yyyy-MM-dd
+    userId: string;
+    role:   string;
+  }) {
+    const { start, end, userId, role } = params;
+
+    // scope
+    let scope = "";
+    if (role === "manager") {
+      scope = `AND (s.employee_id = '${userId}'::uuid OR s.employee_id IN (SELECT id FROM employees WHERE manager_id = '${userId}'::uuid))`;
+    } else if (role !== "admin" && role !== "hr") {
+      scope = `AND s.employee_id = '${userId}'::uuid`;
+    }
+
+    // รวม session ที่ปิดแล้ว + session ที่ยัง running อยู่ (คำนวณเวลา real-time)
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT
+        s.employee_id                                        AS "employeeId",
+        s.task_id                                            AS "taskId",
+        to_char((s.started_at AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS day,
+        COALESCE(SUM(
+          CASE
+            WHEN s.ended_at IS NOT NULL AND s.duration_min IS NOT NULL THEN s.duration_min
+            WHEN s.ended_at IS NULL THEN
+              GREATEST(0, EXTRACT(EPOCH FROM (NOW() - s.started_at)) / 60)::int
+            ELSE 0
+          END
+        ), 0)::int                                           AS "durationMin",
+        t.title                                              AS "taskTitle",
+        t.display_id                                         AS "taskDisplayId",
+        t.status                                             AS status,
+        ls.name                                              AS "statusName",
+        ls.color                                             AS "statusColor"
+      FROM task_time_sessions s
+      JOIN tasks t         ON t.id = s.task_id
+      LEFT JOIN list_statuses ls ON ls.id = t.list_status_id
+      WHERE (s.started_at AT TIME ZONE 'Asia/Bangkok')::date BETWEEN '${start}' AND '${end}'
+        ${scope}
+      GROUP BY s.employee_id, s.task_id, day, t.title, t.display_id, t.status, ls.name, ls.color
+      HAVING COALESCE(SUM(
+        CASE
+          WHEN s.ended_at IS NOT NULL AND s.duration_min IS NOT NULL THEN s.duration_min
+          WHEN s.ended_at IS NULL THEN
+            GREATEST(0, EXTRACT(EPOCH FROM (NOW() - s.started_at)) / 60)::int
+          ELSE 0
+        END
+      ), 0) > 0
+      ORDER BY day ASC
+    `));
+    return rows as unknown as Array<Record<string, any>>;
+  },
+
+  // ── Rework ──────────────────────────────────────────────────────────────────
+
+  async listReworkEvents(taskId: string) {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT
+        r.id,
+        r.task_id          AS "taskId",
+        r.from_status_id   AS "fromStatusId",
+        r.to_status_id     AS "toStatusId",
+        r.from_status_name AS "fromStatusName",
+        r.to_status_name   AS "toStatusName",
+        r.reason,
+        r.requested_by     AS "requestedBy",
+        r.created_at       AS "createdAt",
+        e.name             AS "requestedByName",
+        e.avatar_url       AS "requestedByAvatar"
+      FROM task_rework_events r
+      LEFT JOIN employees e ON e.id = r.requested_by
+      WHERE r.task_id = '${taskId}'::uuid
+      ORDER BY r.created_at DESC
+    `));
+    return rows as unknown as Array<Record<string, any>>;
+  },
+
+  async createReworkEvent(taskId: string, requestedBy: string, toStatusId: string, reason: string) {
+    return await db.transaction(async (tx) => {
+      // Fetch current task + status names for snapshot
+      const current = await tx.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
+      if (!current) throw new Error("Task not found");
+
+      const fromStatus = current.listStatusId
+        ? await tx.query.listStatuses.findFirst({ where: eq(listStatuses.id, current.listStatusId) })
+        : null;
+      const toStatus = await tx.query.listStatuses.findFirst({ where: eq(listStatuses.id, toStatusId) });
+      if (!toStatus) throw new Error("Target status not found");
+
+      // Insert event
+      const [event] = await tx.insert(taskReworkEvents).values({
+        taskId,
+        fromStatusId:   current.listStatusId ?? null,
+        toStatusId,
+        fromStatusName: fromStatus?.name ?? null,
+        toStatusName:   toStatus.name,
+        reason,
+        requestedBy,
+      }).returning();
+
+      // Update task: set new status + increment counter + timestamp
+      await tx.update(tasks).set({
+        listStatusId:    toStatusId,
+        reworkCount:     (current.reworkCount ?? 0) + 1,
+        lastReworkedAt:  new Date(),
+        updatedAt:       new Date(),
+      }).where(eq(tasks.id, taskId));
+
+      return event;
+    });
   },
 };
