@@ -14,7 +14,7 @@ INSERT INTO employees
   (employee_code, name, email, password_hash, role, department, is_active)
 VALUES
   ('MGR-A', 'Manager Alpha', 'mgr.alpha@xiqma.test',
-   crypt('password123', gen_salt('bf')), 'manager', 'Engineering', true)
+   crypt('mgr.alpha@xiqma.test', gen_salt('bf')), 'manager', 'Engineering', true)
 ON CONFLICT (employee_code) DO NOTHING;
 
 -- Manager B

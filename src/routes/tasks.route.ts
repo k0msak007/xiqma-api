@@ -20,6 +20,7 @@ import {
   createExtensionRequestSchema,
   logTimeSchema,
   createReworkSchema,
+  moveTaskSchema,
 } from "@/validators/task.validator.ts";
 
 const timeSessionParamSchema = z.object({ id: z.string().uuid(), sessionId: z.string().uuid() });
@@ -343,6 +344,18 @@ export const tasksRouter = new Hono()
     }
     const event = await taskService.createReworkEvent(id, user.userId, data);
     return created(c, event, "ส่งกลับแก้ไขสำเร็จ");
+  })
+
+  // PATCH /tasks/:id/move — admin/manager only
+  .patch("/:id/move", validate("param", idParamSchema), validate("json", moveTaskSchema), async (c) => {
+    const { id } = c.req.valid("param");
+    const data   = c.req.valid("json");
+    const user   = c.get("user");
+    if (user.role !== "admin" && user.role !== "manager") {
+      return c.json({ success: false, message: "ไม่มีสิทธิ์ย้าย task", error: "FORBIDDEN" }, 403);
+    }
+    const task = await taskService.moveTask(id, data.toListId);
+    return ok(c, task, "ย้าย task สำเร็จ");
   })
 
   // POST /tasks/:id/extension-requests

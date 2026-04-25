@@ -225,6 +225,7 @@ export const taskRepository = {
     if (data.mandayEstimate != null)    { cols.push("manday_estimate");      vals.push(`${data.mandayEstimate}`); }
     if (data.timeEstimateHours != null) { cols.push("time_estimate_hours");  vals.push(`${data.timeEstimateHours}`); }
     if (data.planStart)         { cols.push("plan_start");           vals.push(`'${data.planStart}'`); }
+    if (data.planFinish)        { cols.push("plan_finish");          vals.push(`'${data.planFinish}'`); }
     if (data.durationDays != null) { cols.push("duration_days");    vals.push(`${data.durationDays}`); }
     if (data.deadline)          { cols.push("deadline");             vals.push(`'${data.deadline}'::timestamptz`); }
 
@@ -257,6 +258,7 @@ export const taskRepository = {
     if (data.mandayEstimate !== undefined)    sets.push(data.mandayEstimate != null ? `manday_estimate = ${data.mandayEstimate}` : "manday_estimate = NULL");
     if (data.timeEstimateHours !== undefined) sets.push(data.timeEstimateHours != null ? `time_estimate_hours = ${data.timeEstimateHours}` : "time_estimate_hours = NULL");
     if (data.planStart !== undefined)         sets.push(data.planStart ? `plan_start = '${data.planStart}'` : "plan_start = NULL");
+    if (data.planFinish !== undefined)        sets.push(data.planFinish ? `plan_finish = '${data.planFinish}'` : "plan_finish = NULL");
     if (data.durationDays !== undefined)      sets.push(data.durationDays != null ? `duration_days = ${data.durationDays}` : "duration_days = NULL");
     if (data.deadline !== undefined)          sets.push(data.deadline ? `deadline = '${data.deadline}'::timestamptz` : "deadline = NULL");
     if (data.description !== undefined)       sets.push(data.description != null ? `description = '${data.description.replace(/'/g, "''")}'` : "description = NULL");
@@ -1011,6 +1013,48 @@ export const taskRepository = {
       }).where(eq(tasks.id, taskId));
 
       return event;
+    });
+  },
+
+  /**
+   * Move a task to another list.
+   * - Picks the new list's default status (is_default=true) or the first one by display_order.
+   * - Resets list_status_id since statuses are list-scoped.
+   * - Places the task at the end of the target list (display_order = max+1).
+   */
+  async moveTask(taskId: string, toListId: string) {
+    return await db.transaction(async (tx) => {
+      const current = await tx.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
+      if (!current) throw new Error("Task not found");
+      if (current.listId === toListId) return current;
+
+      // Verify target list exists
+      const targetList = await tx.query.lists.findFirst({ where: eq(lists.id, toListId) });
+      if (!targetList) throw new Error("Target list not found");
+
+      // Pick target status: default first, else lowest display_order
+      const targetStatuses = await tx.query.listStatuses.findMany({
+        where: eq(listStatuses.listId, toListId),
+      });
+      const defaultStatus =
+        targetStatuses.find((s: any) => s.isDefault) ??
+        [...targetStatuses].sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))[0] ??
+        null;
+
+      // New display_order = max in target + 1
+      const maxRows = await tx.execute(
+        sql.raw(`SELECT COALESCE(MAX(display_order), 0) AS m FROM tasks WHERE list_id = '${toListId}'::uuid AND deleted_at IS NULL`)
+      );
+      const nextOrder = Number((maxRows as any).rows?.[0]?.m ?? 0) + 1;
+
+      const [updated] = await tx.update(tasks).set({
+        listId:        toListId,
+        listStatusId:  defaultStatus?.id ?? null,
+        displayOrder:  nextOrder,
+        updatedAt:     new Date(),
+      }).where(eq(tasks.id, taskId)).returning();
+
+      return updated;
     });
   },
 };

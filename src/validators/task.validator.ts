@@ -31,6 +31,7 @@ export const createTaskSchema = z.object({
   mandayEstimate:    z.number().optional(),
   timeEstimateHours: z.number().optional(),
   planStart:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  planFinish:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   durationDays:      z.number().int().min(1).optional(),
   deadline:          z.string().datetime({ offset: true }).optional(),
   description:       z.string().optional(),
@@ -49,6 +50,7 @@ export const updateTaskSchema = z.object({
   timeEstimateHours: z.number().optional().nullable(),
   accumulatedMinutes: z.number().int().optional(),
   planStart:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  planFinish:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   durationDays:      z.number().int().min(1).optional().nullable(),
   deadline:          z.string().datetime({ offset: true }).optional().nullable(),
   description:       z.string().optional().nullable(),
@@ -117,6 +119,12 @@ export const createReworkSchema = z.object({
   reason:     z.string().min(1),
 });
 export type CreateReworkInput = z.infer<typeof createReworkSchema>;
+
+// Move task to another list
+export const moveTaskSchema = z.object({
+  toListId: z.string().uuid(),
+});
+export type MoveTaskInput = z.infer<typeof moveTaskSchema>;
 
 // Search
 export const searchQuerySchema = z.object({

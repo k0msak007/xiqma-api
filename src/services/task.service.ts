@@ -501,4 +501,11 @@ export const taskService = {
     if (!task) throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     return taskRepository.createReworkEvent(taskId, userId, data.toStatusId, data.reason);
   },
+
+  // ── Move (admin/manager only — permission enforced in route) ──────────────────
+  async moveTask(taskId: string, toListId: string) {
+    const task = await taskRepository.findById(taskId);
+    if (!task) throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
+    return taskRepository.moveTask(taskId, toListId);
+  },
 };
