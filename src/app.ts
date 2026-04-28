@@ -29,6 +29,11 @@ import { reportsRouter }           from "@/routes/reports.route.ts";
 import { profileRouter }           from "@/routes/profile.route.ts";
 import { notificationsRouter }     from "@/routes/notifications.route.ts";
 import { auditLogsRouter }         from "@/routes/audit-logs.route.ts";
+import { aiRouter }                from "@/routes/ai.route.ts";
+import { standupsRouter }          from "@/routes/standups.route.ts";
+import { lineRouter }              from "@/routes/line.route.ts";
+import { lineWebhookRouter }       from "@/routes/line-webhook.route.ts";
+import { botSchedulesRouter }      from "@/routes/bot-schedules.route.ts";
 import { healthRouter }            from "@/routes/health.route.ts";
 
 export const app = new Hono()
@@ -75,6 +80,11 @@ export const app = new Hono()
   .route("/api/profile",             profileRouter)
   .route("/api/notifications",       notificationsRouter)
   .route("/api/audit-logs",          auditLogsRouter)
+  .route("/api/ai",                  aiRouter)
+  .route("/api/standups",            standupsRouter)
+  .route("/api/line",                lineRouter)
+  .route("/api/webhooks/line",       lineWebhookRouter)
+  .route("/api/bot-schedules",       botSchedulesRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

@@ -5,6 +5,122 @@ import { employeeRepository } from "@/repositories/employee.repository.ts";
 import { reportsRepository } from "@/repositories/performance.repository.ts";
 import { supabase, ATTACHMENTS_BUCKET, getSignedAvatarUrl } from "@/lib/supabase.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
+import { sql } from "drizzle-orm";
+import { db } from "@/lib/db.ts";
+import { emitNotification } from "@/lib/notification/dispatcher.ts";
+import { normalizeRecipients } from "@/lib/notification/events.ts";
+
+// Returns the status_type for a list_status_id, or null.
+async function getStatusType(listStatusId: string | null | undefined): Promise<string | null> {
+  if (!listStatusId) return null;
+  try {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT type::text AS type FROM list_statuses WHERE id = '${listStatusId}'::uuid LIMIT 1
+    `));
+    const r = (((rows as any).rows ?? rows) as any[])[0];
+    return r?.type ? String(r.type) : null;
+  } catch {
+    return null;
+  }
+}
+
+const TERMINAL_STATUS_TYPES = new Set(["done", "completed", "closed", "cancelled"]);
+
+// Audit-style audience for task events:
+//   = baseRecipients ∪ assignee ∪ assignee.manager ∪ all admins  (minus actor)
+//
+// Use this for any task-related event so:
+//   • assignee always sees what happens on their tasks
+//   • assignee's manager (line supervisor) is in the loop
+//   • all admins observe org-wide activity
+async function augmentTaskAudience(
+  taskId: string,
+  baseRecipients: (string | null | undefined)[],
+  actorId?: string,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const r of baseRecipients) if (r) ids.add(r);
+
+  // Assignee + their direct manager
+  try {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT
+        t.assignee_id::text  AS assignee_id,
+        e.manager_id::text   AS manager_id
+      FROM tasks t
+      LEFT JOIN employees e ON e.id = t.assignee_id
+      WHERE t.id = '${taskId}'::uuid
+      LIMIT 1
+    `));
+    const r = (((rows as any).rows ?? rows) as any[])[0];
+    if (r) {
+      if (r.assignee_id) ids.add(String(r.assignee_id));
+      if (r.manager_id)  ids.add(String(r.manager_id));
+    }
+  } catch (err) {
+    console.error("[augmentTaskAudience.task]", err);
+  }
+
+  // All active admins
+  try {
+    const adminRows = await db.execute<{ id: string }>(sql.raw(`
+      SELECT e.id::text AS id FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      WHERE e.is_active = true AND r.name = 'admin'
+    `));
+    const arr = (((adminRows as any).rows ?? adminRows) as Array<{ id: string }>);
+    for (const a of arr) ids.add(String(a.id));
+  } catch (err) {
+    console.error("[augmentTaskAudience.admins]", err);
+  }
+
+  if (actorId) ids.delete(actorId);
+  return Array.from(ids);
+}
+
+// Find admins + the task creator (if provided) for review-style notifications.
+async function findApproverIds(creatorId: string | undefined): Promise<string[]> {
+  const rows = await db.execute<{ id: string }>(sql.raw(`
+    SELECT e.id::text FROM employees e
+    LEFT JOIN roles r ON e.role_id = r.id
+    WHERE e.is_active = true
+      AND (r.name = 'admin' OR r.name = 'manager')
+  `));
+  const arr = ((rows as any).rows ?? rows) as Array<{ id: string }>;
+  const ids = arr.map((r) => String(r.id));
+  if (creatorId && !ids.includes(creatorId)) ids.push(creatorId);
+  return ids;
+}
+
+// Resolve "@token" mention strings → employee ids (fuzzy: exact name first, then code, then substring).
+async function resolveMentionedEmployees(tokens: string[]): Promise<string[]> {
+  if (tokens.length === 0) return [];
+  const out = new Set<string>();
+  // Load active employees once
+  const rows = await db.execute<{ id: string; name: string; code: string | null }>(sql.raw(`
+    SELECT id::text, name, employee_code AS code FROM employees WHERE is_active = true
+  `));
+  const employees = ((rows as any).rows ?? rows) as Array<{ id: string; name: string; code: string | null }>;
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
+
+  for (const raw of tokens) {
+    const t = norm(raw);
+    if (!t) continue;
+    // Exact name
+    let hit = employees.find((e) => norm(e.name) === t);
+    // Exact code
+    if (!hit) hit = employees.find((e) => e.code && norm(e.code) === t);
+    // Substring on first name
+    if (!hit) {
+      hit = employees.find((e) => {
+        const first = e.name.split(/\s+/)[0];
+        return first ? norm(first) === t || norm(e.name).includes(t) : false;
+      });
+    }
+    if (hit) out.add(hit.id);
+  }
+  return Array.from(out);
+}
 import type {
   CreateTaskInput,
   UpdateTaskInput,
@@ -80,7 +196,25 @@ export const taskService = {
     if (!assignee) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ employee id: ${data.assigneeId}`, 404);
     }
-    return taskRepository.create(data, creatorId);
+    const task = await taskRepository.create(data, creatorId);
+
+    // 🔔 Notify assignee + their manager + all admins (skip actor)
+    const taskId = (task as any).id as string;
+    const displayId = (task as any).display_id as string | undefined;
+    const recipients = await augmentTaskAudience(taskId, [data.assigneeId], creatorId);
+    emitNotification({
+      type:        "assigned",
+      recipients,
+      actorId:     creatorId,
+      title:       `มีงานใหม่: ${data.title}`,
+      body:        displayId ? `[${displayId}] ${data.title}` : data.title,
+      relatedType: "task",
+      relatedId:   taskId,
+      taskId,
+      deepLink:    `/task/${taskId}`,
+    });
+
+    return task;
   },
 
   async updateTask(id: string, data: UpdateTaskInput) {
@@ -88,7 +222,65 @@ export const taskService = {
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${id}`, 404);
     }
-    return taskRepository.update(id, data);
+
+    // Detect status terminal-transition before mutating
+    const oldStatusId = (task as any).list_status_id as string | undefined;
+    const newStatusId = data.listStatusId ?? undefined;
+    const statusChanged = !!newStatusId && newStatusId !== oldStatusId;
+    const [oldType, newType] = statusChanged
+      ? await Promise.all([getStatusType(oldStatusId), getStatusType(newStatusId)])
+      : [null, null];
+    const enteringTerminal =
+      !!newType && TERMINAL_STATUS_TYPES.has(newType) &&
+      (!oldType || !TERMINAL_STATUS_TYPES.has(oldType));
+
+    const updated = await taskRepository.update(id, data);
+
+    // 🔔 If assignee changed → notify new assignee + their manager + admins
+    const oldAssignee = (task as any).assignee_id as string | undefined;
+    const newAssignee = data.assigneeId;
+    if (newAssignee && newAssignee !== oldAssignee) {
+      const title = (updated as any)?.title ?? (task as any)?.title ?? "งาน";
+      const displayId = (updated as any)?.display_id ?? (task as any)?.display_id;
+      const recipients = await augmentTaskAudience(id, [newAssignee]);
+      emitNotification({
+        type:        "assigned",
+        recipients,
+        title:       `มีงานใหม่: ${title}`,
+        body:        displayId ? `[${displayId}] ${title}` : title,
+        relatedType: "task",
+        relatedId:   id,
+        taskId:      id,
+        deepLink:    `/task/${id}`,
+      });
+    }
+
+    // 🔔 If status entered terminal (done/completed/closed/cancelled) → notify creator + assignee + manager + admins
+    if (enteringTerminal) {
+      const assigneeId = (task as any).assignee_id as string | undefined;
+      const creatorId  = (task as any).creator_id as string | undefined;
+      const title      = (updated as any)?.title ?? (task as any)?.title ?? "งาน";
+      const displayId  = (updated as any)?.display_id ?? (task as any)?.display_id;
+      const recipients = await augmentTaskAudience(id, [creatorId, assigneeId]);
+      emitNotification({
+        type:        "task_completed",
+        recipients,
+        title:       `งานเสร็จ: ${title}`,
+        body:        displayId ? `[${displayId}] ${title}` : title,
+        relatedType: "task",
+        relatedId:   id,
+        taskId:      id,
+        deepLink:    `/task/${id}`,
+      });
+      // Also refresh weekly report
+      if (assigneeId) {
+        void reportsRepository
+          .generateWeeklyReport({ employee_id: assigneeId })
+          .catch((e: unknown) => console.error("[points] generate weekly report failed:", e));
+      }
+    }
+
+    return updated;
   },
 
   async updateTaskStatus(id: string, data: UpdateTaskStatusInput) {
@@ -96,17 +288,48 @@ export const taskService = {
     if (!task) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${id}`, 404);
     }
+
+    // Detect transition into terminal state (done/completed/closed/cancelled).
+    // We compare new status type vs old — only emit if entering terminal from non-terminal.
+    const oldStatusId = (task as any).list_status_id as string | undefined;
+    const [oldType, newType] = await Promise.all([
+      getStatusType(oldStatusId),
+      getStatusType(data.listStatusId),
+    ]);
+    const enteringTerminal =
+      !!newType && TERMINAL_STATUS_TYPES.has(newType) &&
+      (!oldType || !TERMINAL_STATUS_TYPES.has(oldType));
+
     const updated = await taskRepository.updateStatus(id, {
       listStatusId: data.listStatusId,
       ...(data.status ? { status: data.status } : {}),
     });
 
-    // เมื่อ task เสร็จ → อัปเดต weekly report ของ assignee ทันที (fire-and-forget)
-    if (data.status === "completed") {
-      const assigneeId = (task as Record<string, unknown>).assignee_id as string;
-      void reportsRepository
-        .generateWeeklyReport({ employee_id: assigneeId })
-        .catch((e: unknown) => console.error("[points] generate weekly report failed:", e));
+    if (enteringTerminal) {
+      const assigneeId = (task as any).assignee_id as string | undefined;
+
+      // Update weekly report (fire-and-forget)
+      if (assigneeId) {
+        void reportsRepository
+          .generateWeeklyReport({ employee_id: assigneeId })
+          .catch((e: unknown) => console.error("[points] generate weekly report failed:", e));
+      }
+
+      // 🔔 Notify creator + assignee + assignee's manager + admins
+      const creatorId  = (task as any).creator_id as string | undefined;
+      const title      = (task as any).title as string;
+      const displayId  = (task as any).display_id as string | undefined;
+      const recipients = await augmentTaskAudience(id, [creatorId, assigneeId]);
+      emitNotification({
+        type:        "task_completed",
+        recipients,
+        title:       `งานเสร็จ: ${title}`,
+        body:        displayId ? `[${displayId}] ${title}` : title,
+        relatedType: "task",
+        relatedId:   id,
+        taskId:      id,
+        deepLink:    `/task/${id}`,
+      });
     }
 
     return updated;
@@ -215,11 +438,72 @@ export const taskService = {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     }
     const comment = await taskRepository.createComment(taskId, authorId, data);
-    
+
+    // 🔔 @mentions: parse @<name> and resolve to employee ids
+    const text = data.commentText ?? "";
+    const mentionTokens = Array.from(text.matchAll(/@([^\s,@]{2,40})/g)).map((m) => m[1] ?? "");
+    let mentionedIds: string[] = [];
+    if (mentionTokens.length > 0) {
+      try {
+        mentionedIds = await resolveMentionedEmployees(mentionTokens);
+        const taskTitle = (task as any).title as string;
+        const displayId = (task as any).display_id as string | undefined;
+        // Augment: mentioned + assignee + assignee's manager + admins
+        const recipients = await augmentTaskAudience(taskId, mentionedIds, authorId);
+        emitNotification({
+          type:        "comment_mention",
+          recipients,
+          actorId:     authorId,
+          title:       displayId ? `มี @ คุณใน [${displayId}]` : `มี @ คุณใน "${taskTitle}"`,
+          body:        text.length > 200 ? text.slice(0, 200) + "..." : text,
+          relatedType: "comment",
+          relatedId:   (comment as any).id ?? null,
+          taskId,
+          deepLink:    `/task/${taskId}`,
+        });
+      } catch (err) {
+        // Mentions are best-effort; don't fail comment creation
+        console.error("[notify.comment_mention] resolve failed:", err);
+      }
+    }
+
+    // 🔔 comment_reply: notify earlier commenters + assignee + manager + admins
+    // (skip recipients already covered by comment_mention to avoid double-noti)
+    try {
+      const priorRows = await db.execute<{ author_id: string }>(sql.raw(`
+        SELECT DISTINCT author_id::text AS author_id FROM task_comments
+        WHERE task_id = '${taskId}'::uuid AND author_id IS NOT NULL
+      `));
+      const priorIds = (((priorRows as any).rows ?? priorRows) as Array<{ author_id: string }>)
+        .map((r) => String(r.author_id));
+
+      const augmented = await augmentTaskAudience(taskId, priorIds, authorId);
+      // Skip people who already got comment_mention noti (would be redundant)
+      const recipients = augmented.filter((id) => !mentionedIds.includes(id));
+
+      if (recipients.length > 0) {
+        const taskTitle = (task as any).title as string;
+        const displayId = (task as any).display_id as string | undefined;
+        emitNotification({
+          type:        "comment_reply",
+          recipients,
+          actorId:     authorId,
+          title:       displayId ? `Comment ใหม่ใน [${displayId}]` : `Comment ใหม่ใน "${taskTitle}"`,
+          body:        text.length > 200 ? text.slice(0, 200) + "..." : text,
+          relatedType: "comment",
+          relatedId:   (comment as any).id ?? null,
+          taskId,
+          deepLink:    `/task/${taskId}`,
+        });
+      }
+    } catch (err) {
+      console.error("[notify.comment_reply] failed:", err);
+    }
+
     // Generate signed URL for avatar
     return {
       ...comment,
-      authorAvatar: comment.authorAvatar 
+      authorAvatar: comment.authorAvatar
         ? await getSignedAvatarUrl(comment.authorAvatar)
         : null,
     };
@@ -441,7 +725,28 @@ export const taskService = {
       throw new AppError(ErrorCode.INVALID_DATE_RANGE, "deadline ใหม่ต้องมากกว่า deadline ปัจจุบัน", 400);
     }
 
-    return taskRepository.createExtensionRequest(taskId, requestedBy, data);
+    const ext = await taskRepository.createExtensionRequest(taskId, requestedBy, data);
+
+    // 🔔 Notify reviewers + assignee's manager + admins (de-duped)
+    try {
+      const reviewers = await findApproverIds(taskRecord.creator_id as string | undefined);
+      const title = (taskRecord.title as string) ?? "งาน";
+      const displayId = taskRecord.display_id as string | undefined;
+      const recipients = await augmentTaskAudience(taskId, reviewers, requestedBy);
+      emitNotification({
+        type:        "extension_request",
+        recipients,
+        actorId:     requestedBy,
+        title:       displayId ? `ขอขยายเวลา [${displayId}]` : `ขอขยายเวลา: ${title}`,
+        body:        data.reason ?? title,
+        relatedType: "extension",
+        relatedId:   (ext as any)?.id ?? null,
+        taskId,
+        deepLink:    `/task/${taskId}`,
+      });
+    } catch (err) { console.error("[notify.extension_request]", err); }
+
+    return ext;
   },
 
   async approveExtension(extensionId: string, reviewedBy: string, role: string) {
@@ -456,7 +761,31 @@ export const taskService = {
     if (extRecord.status !== "pending") {
       throw new AppError(ErrorCode.FORBIDDEN, "คำขอนี้ได้รับการพิจารณาแล้ว", 409);
     }
-    return taskRepository.approveExtension(extensionId, reviewedBy);
+    const updated = await taskRepository.approveExtension(extensionId, reviewedBy);
+
+    // 🔔 Notify requester + assignee + manager + admins
+    try {
+      const requesterId = extRecord.requested_by as string | undefined;
+      const taskId      = extRecord.task_id as string | undefined;
+      if (taskId) {
+        const recipients = await augmentTaskAudience(taskId, [requesterId], reviewedBy);
+        if (recipients.length > 0) {
+          emitNotification({
+            type:        "extension_approved",
+            recipients,
+            actorId:     reviewedBy,
+            title:       "คำขอขยายเวลาได้รับการอนุมัติ",
+            body:        "deadline ใหม่มีผลแล้ว",
+            relatedType: "extension",
+            relatedId:   extensionId,
+            taskId,
+            deepLink:    `/task/${taskId}`,
+          });
+        }
+      }
+    } catch (err) { console.error("[notify.extension_approved]", err); }
+
+    return updated;
   },
 
   async rejectExtension(extensionId: string, reviewedBy: string, role: string, data: RejectExtensionInput) {
@@ -471,7 +800,31 @@ export const taskService = {
     if (extRecord.status !== "pending") {
       throw new AppError(ErrorCode.FORBIDDEN, "คำขอนี้ได้รับการพิจารณาแล้ว", 409);
     }
-    return taskRepository.rejectExtension(extensionId, reviewedBy, data.rejectReason);
+    const updated = await taskRepository.rejectExtension(extensionId, reviewedBy, data.rejectReason);
+
+    // 🔔 Notify requester + assignee + manager + admins (with reason)
+    try {
+      const requesterId = extRecord.requested_by as string | undefined;
+      const taskId      = extRecord.task_id as string | undefined;
+      if (taskId) {
+        const recipients = await augmentTaskAudience(taskId, [requesterId], reviewedBy);
+        if (recipients.length > 0) {
+          emitNotification({
+            type:        "extension_rejected",
+            recipients,
+            actorId:     reviewedBy,
+            title:       "คำขอขยายเวลาถูกปฏิเสธ",
+            body:        data.rejectReason,
+            relatedType: "extension",
+            relatedId:   extensionId,
+            taskId,
+            deepLink:    `/task/${taskId}`,
+          });
+        }
+      }
+    } catch (err) { console.error("[notify.extension_rejected]", err); }
+
+    return updated;
   },
 
   async listAllExtensionRequests(status: string | undefined, userId: string, role: string) {
@@ -499,7 +852,30 @@ export const taskService = {
   async createReworkEvent(taskId: string, userId: string, data: { toStatusId: string; reason: string }) {
     const task = await taskRepository.findById(taskId);
     if (!task) throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
-    return taskRepository.createReworkEvent(taskId, userId, data.toStatusId, data.reason);
+    const ev = await taskRepository.createReworkEvent(taskId, userId, data.toStatusId, data.reason);
+
+    // 🔔 Notify assignee + their manager + admins (skip the actor who triggered)
+    try {
+      const tr = task as Record<string, unknown>;
+      const title      = tr.title as string;
+      const displayId  = tr.display_id as string | undefined;
+      const recipients = await augmentTaskAudience(taskId, [], userId);
+      if (recipients.length > 0) {
+        emitNotification({
+          type:        "rework_requested",
+          recipients,
+          actorId:     userId,
+          title:       displayId ? `ส่งกลับแก้ไข [${displayId}]` : `ส่งกลับแก้ไข: ${title}`,
+          body:        data.reason,
+          relatedType: "task",
+          relatedId:   taskId,
+          taskId,
+          deepLink:    `/task/${taskId}`,
+        });
+      }
+    } catch (err) { console.error("[notify.rework_requested]", err); }
+
+    return ev;
   },
 
   // ── Move (admin/manager only — permission enforced in route) ──────────────────

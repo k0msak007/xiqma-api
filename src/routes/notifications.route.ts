@@ -10,6 +10,19 @@ const idParamSchema = z.object({
   id: z.string().uuid("id ต้องเป็น UUID"),
 });
 
+const updatePrefsBody = z.object({
+  items: z.array(z.object({
+    eventType: z.string().min(1),
+    channel:   z.enum(["in_app", "line", "email"]),
+    enabled:   z.boolean(),
+  })).min(1),
+});
+
+const quietHoursBody = z.object({
+  start: z.string().regex(/^\d{2}:\d{2}$/),
+  end:   z.string().regex(/^\d{2}:\d{2}$/),
+});
+
 export const notificationsRouter = new Hono()
   .use(authMiddleware)
 
@@ -40,4 +53,34 @@ export const notificationsRouter = new Hono()
     const { id } = c.req.valid("param");
     const updated = await notificationService.markRead(id, user.userId);
     return ok(c, updated, "mark notification ว่าอ่านแล้วสำเร็จ");
+  })
+
+  // GET /notifications/prefs
+  .get("/prefs", async (c) => {
+    const user = c.get("user");
+    const prefs = await notificationService.getPrefs(user.userId);
+    return ok(c, prefs, "ดึง notification preferences สำเร็จ");
+  })
+
+  // PUT /notifications/prefs — upsert subset
+  .put("/prefs", validate("json", updatePrefsBody), async (c) => {
+    const user = c.get("user");
+    const { items } = c.req.valid("json");
+    const updated = await notificationService.updatePrefs(user.userId, items);
+    return ok(c, updated, "อัปเดต preferences สำเร็จ");
+  })
+
+  // GET /notifications/quiet-hours
+  .get("/quiet-hours", async (c) => {
+    const user = c.get("user");
+    const qh = await notificationService.getQuietHours(user.userId);
+    return ok(c, qh, "ดึง quiet hours สำเร็จ");
+  })
+
+  // PUT /notifications/quiet-hours
+  .put("/quiet-hours", validate("json", quietHoursBody), async (c) => {
+    const user = c.get("user");
+    const { start, end } = c.req.valid("json");
+    const updated = await notificationService.setQuietHours(user.userId, start, end);
+    return ok(c, updated, "อัปเดต quiet hours สำเร็จ");
   });
