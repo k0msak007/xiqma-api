@@ -14,12 +14,12 @@ export interface BotSchedule {
   sendDays:          number[];
   sendDayOfMonth:    number | null;
   audienceType:      "all" | "role" | "employee";
-  audienceValue:     string | null;
+  audienceValues:    string[];
   respectWorkDays:   boolean;
   mode:              "static" | "ai";
   titleTemplate:     string;
   bodyTemplate:      string;
-  contextKind:       "today" | "yesterday" | "week" | "none";
+  contextKind:       "today" | "yesterday" | "week" | "none" | "morning_briefing" | "leave_reminder" | "time_reminder";
   channels:          string[];
   notifType:         string;
   deepLink:          string | null;
@@ -37,7 +37,7 @@ function rowToSchedule(r: any): BotSchedule {
     sendDays:         Array.isArray(r.send_days) ? r.send_days.map((n: any) => Number(n)) : [],
     sendDayOfMonth:   r.send_day_of_month != null ? Number(r.send_day_of_month) : null,
     audienceType:     (r.audience_type ?? "all") as BotSchedule["audienceType"],
-    audienceValue:    r.audience_value ? String(r.audience_value) : null,
+    audienceValues:   Array.isArray(r.audience_values) ? r.audience_values.map((s: any) => String(s)) : [],
     respectWorkDays:  !!r.respect_work_days,
     mode:             (r.mode ?? "ai") as BotSchedule["mode"],
     titleTemplate:    String(r.title_template ?? ""),
@@ -55,7 +55,7 @@ const COLS = `
   id, name, description, enabled,
   send_time::text AS send_time,
   send_days, send_day_of_month,
-  audience_type, audience_value, respect_work_days,
+  audience_type, audience_values, respect_work_days,
   mode, title_template, body_template, context_kind,
   channels, notif_type, deep_link,
   created_at, updated_at
@@ -104,7 +104,14 @@ export const botScheduleRepository = {
       cols.push("send_day_of_month"); vals.push(`${input.sendDayOfMonth}`);
     }
     if (input.audienceType !== undefined)    { cols.push("audience_type");   vals.push(`'${input.audienceType}'`); }
-    if (input.audienceValue !== undefined)   { cols.push("audience_value");  vals.push(input.audienceValue ? `'${input.audienceValue.replace(/'/g, "''")}'` : "NULL"); }
+    if (input.audienceValues !== undefined)  {
+      cols.push("audience_values");
+      if (input.audienceValues.length > 0) {
+        vals.push(`ARRAY[${input.audienceValues.map((v) => `'${v.replace(/'/g, "''")}'`).join(",")}]::text[]`);
+      } else {
+        vals.push("'{}'::text[]");
+      }
+    }
     if (input.respectWorkDays !== undefined) { cols.push("respect_work_days"); vals.push(`${input.respectWorkDays}`); }
     if (input.mode !== undefined)            { cols.push("mode");            vals.push(`'${input.mode}'`); }
     if (input.contextKind !== undefined)     { cols.push("context_kind");    vals.push(`'${input.contextKind}'`); }
@@ -130,7 +137,13 @@ export const botScheduleRepository = {
     if (input.sendDays !== undefined)        sets.push(`send_days = ARRAY[${input.sendDays.join(",")}]::integer[]`);
     if (input.sendDayOfMonth !== undefined)  sets.push(input.sendDayOfMonth != null ? `send_day_of_month = ${input.sendDayOfMonth}` : "send_day_of_month = NULL");
     if (input.audienceType !== undefined)    sets.push(`audience_type = '${input.audienceType}'`);
-    if (input.audienceValue !== undefined)   sets.push(input.audienceValue ? `audience_value = '${input.audienceValue.replace(/'/g, "''")}'` : "audience_value = NULL");
+    if (input.audienceValues !== undefined) {
+      if (input.audienceValues.length > 0) {
+        sets.push(`audience_values = ARRAY[${input.audienceValues.map((v) => `'${v.replace(/'/g, "''")}'`).join(",")}]::text[]`);
+      } else {
+        sets.push("audience_values = '{}'::text[]");
+      }
+    }
     if (input.respectWorkDays !== undefined) sets.push(`respect_work_days = ${input.respectWorkDays}`);
     if (input.mode !== undefined)            sets.push(`mode = '${input.mode}'`);
     if (input.titleTemplate !== undefined)   sets.push(`title_template = '${input.titleTemplate.replace(/'/g, "''")}'`);
@@ -154,19 +167,31 @@ export const botScheduleRepository = {
 
   // ── Audience resolution ────────────────────────────────────────────────────
   async resolveAudience(s: BotSchedule): Promise<string[]> {
-    if (s.audienceType === "employee" && s.audienceValue) {
-      const rows = await db.execute<{ id: string }>(sql.raw(`
-        SELECT id::text FROM employees WHERE id = '${s.audienceValue}'::uuid AND is_active = true
-      `));
-      return (((rows as any).rows ?? rows) as any[]).map((r) => String(r.id));
+    if (s.audienceType === "employee" && s.audienceValues.length > 0) {
+      const ids = new Set<string>();
+      for (const empId of s.audienceValues) {
+        const rows = await db.execute<{ id: string }>(sql.raw(`
+          SELECT id::text FROM employees WHERE id = '${empId}'::uuid AND is_active = true
+        `));
+        for (const r of ((rows as any).rows ?? rows) as Array<{ id: string }>) {
+          ids.add(String(r.id));
+        }
+      }
+      return Array.from(ids);
     }
-    if (s.audienceType === "role" && s.audienceValue) {
-      const rows = await db.execute<{ id: string }>(sql.raw(`
-        SELECT e.id::text FROM employees e
-        LEFT JOIN roles r ON e.role_id = r.id
-        WHERE e.is_active = true AND r.name = '${s.audienceValue.replace(/'/g, "''")}'
-      `));
-      return (((rows as any).rows ?? rows) as any[]).map((r) => String(r.id));
+    if (s.audienceType === "role" && s.audienceValues.length > 0) {
+      const ids = new Set<string>();
+      for (const roleName of s.audienceValues) {
+        const rows = await db.execute<{ id: string }>(sql.raw(`
+          SELECT e.id::text FROM employees e
+          LEFT JOIN roles r ON e.role_id = r.id
+          WHERE e.is_active = true AND r.name = '${roleName.replace(/'/g, "''")}'
+        `));
+        for (const r of ((rows as any).rows ?? rows) as Array<{ id: string }>) {
+          ids.add(String(r.id));
+        }
+      }
+      return Array.from(ids);
     }
     // 'all'
     const rows = await db.execute<{ id: string }>(sql.raw(`

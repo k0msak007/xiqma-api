@@ -28,9 +28,66 @@ interface ContextData {
   weekCompleted: number;
   weekHours:    number;
   overdue:      number;
+  // morning_briefing — task lists
+  overdueList:   string;
+  dueTodayList:  string;
+  dueSoonList:   string;
+  // leave_reminder
+  leaveToday:    string;
+  leaveTomorrow: string;
+  leaveThisWeek: string;
+  leaveQuota:    string;
+  pendingLeaves: string;
+  leaveNone:     string;
+  // time_reminder
+  timeLogged:       string;
+  timeMissing:      string;
+  timeMissingCount: string;
+  timeTotal:        string;
 }
 
 const WEEKDAY_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const MONTH_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+function fmtDeadline(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const day = d.getDate();
+  const month = MONTH_TH[d.getMonth()];
+  const hours = String(d.getHours()).padStart(2, "0");
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  if (hours === "00" && mins === "00") return `${day} ${month}`;
+  if (hours === "23" && mins === "59") return `${day} ${month}`;
+  return `${day} ${month} ${hours}:${mins}`;
+}
+
+function formatTaskList(rows: Array<{ display_id: string | null; title: string; deadline: string }>): string {
+  if (!rows || rows.length === 0) return "";
+  return rows.map((t) => {
+    const id = t.display_id ? `[${t.display_id}] ` : "";
+    const dl = t.deadline ? ` — กำหนด ${fmtDeadline(t.deadline)}` : "";
+    return `${id}${t.title}${dl}`;
+  }).join("\n");
+}
+
+function fmtDateRange(startIso: string, endIso: string): string {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  const sd = s.getDate(), sm = MONTH_TH[s.getMonth()];
+  const ed = e.getDate(), em = MONTH_TH[e.getMonth()];
+  if (startIso.slice(0, 10) === endIso.slice(0, 10)) return `${sd} ${sm}`;
+  if (sm === em) return `${sd}-${ed} ${sm}`;
+  return `${sd} ${sm} - ${ed} ${em}`;
+}
+
+function formatLeaveList(rows: Array<{ name: string; type: string; start_date: string; end_date: string }>): string {
+  if (!rows || rows.length === 0) return "";
+  return rows.map((r) => {
+    const leaveType = r.type === "sick" ? "ลาป่วย" : r.type === "vacation" ? "พักร้อน" : r.type === "annual" ? "ลาพักร้อน" : r.type;
+    return `${r.name} (${leaveType} ${fmtDateRange(r.start_date, r.end_date)})`;
+  }).join("\n");
+}
 
 async function buildEmployeeContext(employeeId: string, kind: BotSchedule["contextKind"]): Promise<ContextData> {
   // Bangkok-aware date helper
@@ -60,6 +117,19 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
     weekCompleted:  0,
     weekHours:      0,
     overdue:        0,
+    overdueList:    "",
+    dueTodayList:   "",
+    dueSoonList:    "",
+    leaveToday:     "",
+    leaveTomorrow:  "",
+    leaveThisWeek:  "",
+    leaveQuota:     "",
+    pendingLeaves:  "",
+    leaveNone:      "",
+    timeLogged:       "",
+    timeMissing:      "",
+    timeMissingCount: "",
+    timeTotal:        "",
   };
 
   if (kind === "none") return ctx;
@@ -111,6 +181,159 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
     ctx.weekCompleted = Number(r.completed ?? 0);
     ctx.weekHours     = Math.round(Number(r.minutes ?? 0) / 60 * 10) / 10;
     ctx.overdue       = Number(r.overdue ?? 0);
+  } else if (kind === "morning_briefing") {
+    // ── Overdue (deadline < NOW, not completed) ──
+    const overdueRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT t.display_id, t.title, t.deadline::text AS deadline
+      FROM tasks t
+      WHERE t.assignee_id = '${employeeId}'::uuid
+        AND t.deleted_at IS NULL
+        AND t.completed_at IS NULL
+        AND t.deadline IS NOT NULL
+        AND t.deadline < NOW()
+      ORDER BY t.deadline ASC
+    `));
+    const ov = ((overdueRows as any).rows ?? overdueRows) as Array<{ display_id: string | null; title: string; deadline: string }>;
+    ctx.overdueList = formatTaskList(ov);
+    ctx.overdue     = ov.length;
+
+    // ── Due today (deadline between NOW and end of today Bangkok) ──
+    const dueTodayRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT t.display_id, t.title, t.deadline::text AS deadline
+      FROM tasks t
+      WHERE t.assignee_id = '${employeeId}'::uuid
+        AND t.deleted_at IS NULL
+        AND t.completed_at IS NULL
+        AND t.deadline IS NOT NULL
+        AND t.deadline >= NOW()
+        AND t.deadline < ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Bangkok')
+      ORDER BY t.deadline ASC
+    `));
+    const dt = ((dueTodayRows as any).rows ?? dueTodayRows) as Array<{ display_id: string | null; title: string; deadline: string }>;
+    ctx.dueTodayList = formatTaskList(dt);
+
+    // ── Due in 3 days (tomorrow .. 3 days from now) ──
+    const dueSoonRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT t.display_id, t.title, t.deadline::text AS deadline
+      FROM tasks t
+      WHERE t.assignee_id = '${employeeId}'::uuid
+        AND t.deleted_at IS NULL
+        AND t.completed_at IS NULL
+        AND t.deadline IS NOT NULL
+        AND t.deadline >= ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Bangkok')
+        AND t.deadline < ((CURRENT_DATE + INTERVAL '4 days') AT TIME ZONE 'Asia/Bangkok')
+      ORDER BY t.deadline ASC
+    `));
+    const ds = ((dueSoonRows as any).rows ?? dueSoonRows) as Array<{ display_id: string | null; title: string; deadline: string }>;
+    ctx.dueSoonList = formatTaskList(ds);
+
+    // Also populate todayPlanned (incomplete tasks due today or earlier)
+    const plannedRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT COUNT(*)::int AS c FROM tasks
+      WHERE assignee_id = '${employeeId}'::uuid AND deleted_at IS NULL
+        AND completed_at IS NULL
+        AND (plan_start IS NULL OR plan_start <= (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok'))
+    `));
+    const pr = (((plannedRows as any).rows ?? plannedRows) as any[])[0] ?? {};
+    ctx.todayPlanned = Number(pr.c ?? 0);
+  } else if (kind === "leave_reminder") {
+    // ── Leave today (company-wide) ──
+    const todayRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      FROM leave_requests lr
+      JOIN employees e ON lr.employee_id = e.id
+      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+        AND lr.start_date <= (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
+        AND lr.end_date >= (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
+      ORDER BY lr.start_date
+      LIMIT 20
+    `));
+    const today = ((todayRows as any).rows ?? todayRows) as Array<{ name: string; type: string; start_date: string; end_date: string }>;
+    ctx.leaveToday = formatLeaveList(today);
+
+    // ── Leave tomorrow (company-wide) ──
+    const tomorrowRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      FROM leave_requests lr
+      JOIN employees e ON lr.employee_id = e.id
+      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+        AND lr.start_date = ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Bangkok')::date
+      ORDER BY lr.start_date
+      LIMIT 20
+    `));
+    const tomorrow = ((tomorrowRows as any).rows ?? tomorrowRows) as Array<{ name: string; type: string; start_date: string; end_date: string }>;
+    ctx.leaveTomorrow = formatLeaveList(tomorrow);
+
+    // ── Leave in next 7 days (company-wide) ──
+    const weekRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      FROM leave_requests lr
+      JOIN employees e ON lr.employee_id = e.id
+      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+        AND lr.start_date > (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
+        AND lr.start_date <= ((CURRENT_DATE + INTERVAL '7 days') AT TIME ZONE 'Asia/Bangkok')::date
+      ORDER BY lr.start_date
+      LIMIT 30
+    `));
+    const week = ((weekRows as any).rows ?? weekRows) as Array<{ name: string; type: string; start_date: string; end_date: string }>;
+    ctx.leaveThisWeek = formatLeaveList(week);
+
+    // ── Leave quota (per employee) ──
+    const quotaRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT type, COALESCE(remaining_days, total_days)::int AS remaining
+      FROM leave_quotas
+      WHERE employee_id = '${employeeId}'::uuid AND year = EXTRACT(YEAR FROM CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')::int
+      ORDER BY type
+    `));
+    const quotas = ((quotaRows as any).rows ?? quotaRows) as Array<{ type: string; remaining: number }>;
+    if (quotas.length > 0) {
+      ctx.leaveQuota = quotas.map((q) => {
+        const label = q.type === "annual" ? "พักร้อน" : q.type === "sick" ? "ป่วย" : q.type === "vacation" ? "พักร้อน" : q.type;
+        return `${label}: ${q.remaining} วัน`;
+      }).join(", ");
+    }
+
+    // ── Pending leaves (if this employee is a manager) ──
+    const pendingRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      FROM leave_requests lr
+      JOIN employees e ON lr.employee_id = e.id
+      WHERE lr.status = 'pending' AND lr.deleted_at IS NULL
+        AND e.manager_id = '${employeeId}'::uuid
+      ORDER BY lr.start_date
+      LIMIT 10
+    `));
+    const pending = ((pendingRows as any).rows ?? pendingRows) as Array<{ name: string; type: string; start_date: string; end_date: string }>;
+    ctx.pendingLeaves = formatLeaveList(pending);
+
+    if (!ctx.leaveToday && !ctx.leaveTomorrow && !ctx.leaveThisWeek) {
+      ctx.leaveNone = "ไม่มีใครลาในช่วงนี้";
+    }
+  } else if (kind === "time_reminder") {
+    // ── Time tracking today ──
+    const timeRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      WITH today_sessions AS (
+        SELECT
+          COALESCE(SUM(CASE WHEN ended_at IS NOT NULL AND duration_min IS NOT NULL THEN duration_min
+                            WHEN ended_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at))/60)::int
+                            ELSE 0 END), 0)::int AS minutes,
+          COUNT(*)::int AS session_count
+        FROM task_time_sessions
+        WHERE employee_id = '${employeeId}'::uuid
+          AND (started_at AT TIME ZONE 'Asia/Bangkok')::date = (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')::date
+      )
+      SELECT minutes, session_count FROM today_sessions
+    `));
+    const tr = (((timeRows as any).rows ?? timeRows) as any[])[0] ?? {};
+    const minutes = Number(tr.minutes ?? 0);
+    if (minutes > 0) {
+      const hours = Math.round(minutes / 60 * 10) / 10;
+      ctx.timeLogged = `✅ คุณ log แล้ว ${hours} ชม.`;
+      ctx.timeMissing = "";
+    } else {
+      ctx.timeLogged = "";
+      ctx.timeMissing = "⚠️ คุณยังไม่ได้ log time วันนี้";
+    }
   }
 
   return ctx;
@@ -127,10 +350,43 @@ function renderTemplate(template: string, ctx: ContextData): string {
     .replace(/\{\{\s*todayHours\s*\}\}/g,     String(ctx.todayHours))
     .replace(/\{\{\s*weekCompleted\s*\}\}/g,  String(ctx.weekCompleted))
     .replace(/\{\{\s*weekHours\s*\}\}/g,      String(ctx.weekHours))
-    .replace(/\{\{\s*overdue\s*\}\}/g,        String(ctx.overdue));
+    .replace(/\{\{\s*overdue\s*\}\}/g,        String(ctx.overdue))
+    .replace(/\{\{\s*overdueList\s*\}\}/g,    ctx.overdueList)
+    .replace(/\{\{\s*dueTodayList\s*\}\}/g,   ctx.dueTodayList)
+    .replace(/\{\{\s*dueSoonList\s*\}\}/g,    ctx.dueSoonList)
+    .replace(/\{\{\s*leaveToday\s*\}\}/g,     ctx.leaveToday)
+    .replace(/\{\{\s*leaveTomorrow\s*\}\}/g,  ctx.leaveTomorrow)
+    .replace(/\{\{\s*leaveThisWeek\s*\}\}/g,  ctx.leaveThisWeek)
+    .replace(/\{\{\s*leaveQuota\s*\}\}/g,     ctx.leaveQuota)
+    .replace(/\{\{\s*pendingLeaves\s*\}\}/g,  ctx.pendingLeaves)
+    .replace(/\{\{\s*leaveNone\s*\}\}/g,      ctx.leaveNone)
+    .replace(/\{\{\s*timeLogged\s*\}\}/g,     ctx.timeLogged)
+    .replace(/\{\{\s*timeMissing\s*\}\}/g,    ctx.timeMissing);
 }
 
 async function generateAiBody(prompt: string, ctx: ContextData): Promise<string> {
+  const contextLines: string[] = [
+    `- ชื่อ: ${ctx.employeeName}`,
+    `- วันที่: ${ctx.date} (${ctx.weekday})`,
+  ];
+  if (ctx.todayPlanned > 0) contextLines.push(`- งานที่ค้างวันนี้: ${ctx.todayPlanned}`);
+  if (ctx.todayCompleted > 0) contextLines.push(`- งานที่ปิดวันนี้: ${ctx.todayCompleted}`);
+  if (ctx.todayHours > 0) contextLines.push(`- เวลาวันนี้: ${ctx.todayHours} ชม.`);
+  if (ctx.weekCompleted > 0) contextLines.push(`- งานปิดสัปดาห์นี้: ${ctx.weekCompleted}`);
+  if (ctx.weekHours > 0) contextLines.push(`- เวลาสัปดาห์นี้: ${ctx.weekHours} ชม.`);
+  if (ctx.overdue > 0) contextLines.push(`- เกินกำหนด: ${ctx.overdue}`);
+  if (ctx.overdueList) contextLines.push(`\n🔴 เกินกำหนด:\n${ctx.overdueList}`);
+  if (ctx.dueTodayList) contextLines.push(`\n⚠️ กำหนดวันนี้:\n${ctx.dueTodayList}`);
+  if (ctx.dueSoonList) contextLines.push(`\n📅 ใกล้ครบ 3 วัน:\n${ctx.dueSoonList}`);
+  if (ctx.leaveToday) contextLines.push(`\n🏖️ ลาวันนี้:\n${ctx.leaveToday}`);
+  if (ctx.leaveTomorrow) contextLines.push(`\n📅 ลาพรุ่งนี้:\n${ctx.leaveTomorrow}`);
+  if (ctx.leaveThisWeek) contextLines.push(`\n📅 ลาใน 7 วัน:\n${ctx.leaveThisWeek}`);
+  if (ctx.leaveQuota) contextLines.push(`\nวันลาคงเหลือ: ${ctx.leaveQuota}`);
+  if (ctx.pendingLeaves) contextLines.push(`\n⏳ รออนุมัติลา:\n${ctx.pendingLeaves}`);
+  if (ctx.leaveNone) contextLines.push(`\n${ctx.leaveNone}`);
+  if (ctx.timeLogged) contextLines.push(`\n${ctx.timeLogged}`);
+  if (ctx.timeMissing) contextLines.push(`\n${ctx.timeMissing}`);
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -142,17 +398,10 @@ async function generateAiBody(prompt: string, ctx: ContextData): Promise<string>
       content: `${prompt}
 
 ข้อมูลพนักงาน:
-- ชื่อ: ${ctx.employeeName}
-- วันที่: ${ctx.date} (${ctx.weekday})
-- งานที่ค้างวันนี้: ${ctx.todayPlanned}
-- งานที่ปิดวันนี้: ${ctx.todayCompleted}
-- เวลาวันนี้: ${ctx.todayHours} ชม.
-- งานปิดสัปดาห์นี้: ${ctx.weekCompleted}
-- เวลาสัปดาห์นี้: ${ctx.weekHours} ชม.
-- เกินกำหนด: ${ctx.overdue}`,
+${contextLines.join("\n")}`,
     },
   ];
-  const ai = await chatComplete({ messages, temperature: 0.5, maxTokens: 400 });
+  const ai = await chatComplete({ messages, temperature: 0.5, maxTokens: 600 });
   return ai.text.trim();
 }
 
