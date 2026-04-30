@@ -1057,4 +1057,45 @@ export const taskRepository = {
       return updated;
     });
   },
+
+  // ── Vector similarity search ──────────────────────────────────────────────
+  async findSimilarTasks(embeddingArray: number[], limit = 5): Promise<Array<{
+    taskId: string; title: string; displayId: string | null;
+    estimatedHours: number | null; actualHours: number | null;
+    similarity: number; completed: boolean;
+  }>> {
+    const vecStr = embeddingArray.map((n) => Number(n).toFixed(8)).join(",");
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SET LOCAL hnsw.ef_search = 100;
+      SELECT
+        te.task_id::text AS task_id,
+        t.title,
+        t.display_id,
+        t.time_estimate_hours::float AS estimated_hours,
+        COALESCE(ts.actual_hours, 0)::float AS actual_hours,
+        (1 - (te.embedding <=> '[${vecStr}]'::vector) / 2)::float AS similarity,
+        CASE WHEN t.completed_at IS NOT NULL THEN true ELSE false END AS completed
+      FROM task_embeddings te
+      JOIN tasks t ON te.task_id = t.id
+      LEFT JOIN (
+        SELECT task_id, SUM(duration_min) / 60.0 AS actual_hours
+        FROM task_time_sessions
+        GROUP BY task_id
+      ) ts ON ts.task_id = t.id
+      WHERE t.deleted_at IS NULL
+        AND te.embedding IS NOT NULL
+      ORDER BY te.embedding <=> '[${vecStr}]'::vector
+      LIMIT ${limit}
+    `));
+    const arr = ((rows as any).rows ?? rows) as any[];
+    return arr.map((r: any) => ({
+      taskId:          String(r.task_id ?? ""),
+      title:           String(r.title ?? ""),
+      displayId:       r.display_id ? String(r.display_id) : null,
+      estimatedHours:  r.estimated_hours != null ? Number(r.estimated_hours) : null,
+      actualHours:     r.actual_hours != null ? Number(r.actual_hours) : null,
+      similarity:      Number(r.similarity ?? 0),
+      completed:       !!r.completed,
+    }));
+  },
 };

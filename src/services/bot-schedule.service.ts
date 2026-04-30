@@ -44,6 +44,12 @@ interface ContextData {
   timeMissing:      string;
   timeMissingCount: string;
   timeTotal:        string;
+  // weekly_hours
+  targetHours:       string;
+  weekAssignedHours: string;
+  weekLoggedHours:   string;
+  hoursGap:          string;
+  hoursOk:           string;
 }
 
 const WEEKDAY_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
@@ -130,6 +136,11 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
     timeMissing:      "",
     timeMissingCount: "",
     timeTotal:        "",
+    targetHours:       "",
+    weekAssignedHours: "",
+    weekLoggedHours:   "",
+    hoursGap:          "",
+    hoursOk:           "",
   };
 
   if (kind === "none") return ctx;
@@ -334,6 +345,62 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
       ctx.timeLogged = "";
       ctx.timeMissing = "⚠️ คุณยังไม่ได้ log time วันนี้";
     }
+  } else if (kind === "weekly_hours") {
+    // ── Target hours from employee_performance_config JOIN work_schedules ──
+    const cfgRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT COALESCE(ws.hours_per_week * epc.expected_ratio, 32)::numeric(6,1) AS target
+      FROM employee_performance_config epc
+      JOIN work_schedules ws ON epc.work_schedule_id = ws.id
+      WHERE epc.employee_id = '${employeeId}'::uuid
+      LIMIT 1
+    `));
+    const cfg = (((cfgRows as any).rows ?? cfgRows) as any[])[0];
+    const target = cfg ? Number(cfg.target) : 32;
+    ctx.targetHours = String(Math.round(target * 10) / 10);
+
+    // ── Assigned hours (estimated_minutes of incomplete tasks this week) ──
+    // Fallback: if no estimated_minutes → assume 240 min (4 hrs) per task
+    const assignedRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT COALESCE(
+        SUM(CASE
+          WHEN t.estimated_minutes IS NOT NULL AND t.estimated_minutes > 0 THEN t.estimated_minutes
+          ELSE 240
+        END) / 60.0, 0
+      )::numeric(6,1) AS assigned
+      FROM tasks t
+      WHERE t.assignee_id = '${employeeId}'::uuid
+        AND t.deleted_at IS NULL
+        AND t.completed_at IS NULL
+    `));
+    const ar = (((assignedRows as any).rows ?? assignedRows) as any[])[0] ?? {};
+    const assigned = Number(ar.assigned ?? 0);
+    ctx.weekAssignedHours = String(Math.round(assigned * 10) / 10);
+
+    // ── Logged hours (time sessions this week) ──
+    const logRows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT COALESCE(
+        SUM(CASE WHEN ended_at IS NOT NULL AND duration_min IS NOT NULL THEN duration_min
+                 WHEN ended_at IS NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at))/60)::int
+                 ELSE 0 END) / 60.0, 0
+      )::numeric(6,1) AS logged
+      FROM task_time_sessions
+      WHERE employee_id = '${employeeId}'::uuid
+        AND (started_at AT TIME ZONE 'Asia/Bangkok')::date
+            >= ((CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')::int + 1) AT TIME ZONE 'Asia/Bangkok')::date
+    `));
+    const lr = (((logRows as any).rows ?? logRows) as any[])[0] ?? {};
+    const logged = Number(lr.logged ?? 0);
+    ctx.weekLoggedHours = String(Math.round(logged * 10) / 10);
+
+    // ── Derived vars ──
+    const gap = target - assigned;
+    if (gap > 0) {
+      ctx.hoursGap = String(Math.round(gap * 10) / 10);
+      ctx.hoursOk = "";
+    } else {
+      ctx.hoursGap = "";
+      ctx.hoursOk = "✅ ครบชั่วโมงแล้ว";
+    }
   }
 
   return ctx;
@@ -361,7 +428,12 @@ function renderTemplate(template: string, ctx: ContextData): string {
     .replace(/\{\{\s*pendingLeaves\s*\}\}/g,  ctx.pendingLeaves)
     .replace(/\{\{\s*leaveNone\s*\}\}/g,      ctx.leaveNone)
     .replace(/\{\{\s*timeLogged\s*\}\}/g,     ctx.timeLogged)
-    .replace(/\{\{\s*timeMissing\s*\}\}/g,    ctx.timeMissing);
+    .replace(/\{\{\s*timeMissing\s*\}\}/g,    ctx.timeMissing)
+    .replace(/\{\{\s*targetHours\s*\}\}/g,       ctx.targetHours)
+    .replace(/\{\{\s*weekAssignedHours\s*\}\}/g, ctx.weekAssignedHours)
+    .replace(/\{\{\s*weekLoggedHours\s*\}\}/g,   ctx.weekLoggedHours)
+    .replace(/\{\{\s*hoursGap\s*\}\}/g,          ctx.hoursGap)
+    .replace(/\{\{\s*hoursOk\s*\}\}/g,           ctx.hoursOk);
 }
 
 async function generateAiBody(prompt: string, ctx: ContextData): Promise<string> {
@@ -386,6 +458,11 @@ async function generateAiBody(prompt: string, ctx: ContextData): Promise<string>
   if (ctx.leaveNone) contextLines.push(`\n${ctx.leaveNone}`);
   if (ctx.timeLogged) contextLines.push(`\n${ctx.timeLogged}`);
   if (ctx.timeMissing) contextLines.push(`\n${ctx.timeMissing}`);
+  if (ctx.targetHours) contextLines.push(`\nเป้าหมายสัปดาห์: ${ctx.targetHours} ชม.`);
+  if (ctx.weekAssignedHours) contextLines.push(`ได้รับงานแล้ว: ${ctx.weekAssignedHours} ชม.`);
+  if (ctx.weekLoggedHours) contextLines.push(`log แล้ว: ${ctx.weekLoggedHours} ชม.`);
+  if (ctx.hoursGap) contextLines.push(`⚠️ ขาดอีก: ${ctx.hoursGap} ชม.`);
+  if (ctx.hoursOk) contextLines.push(ctx.hoursOk);
 
   const messages: ChatMessage[] = [
     {
@@ -480,12 +557,11 @@ export const botScheduleService = {
   },
 
   /**
-   * Cron tick: every hour. For each enabled schedule, decide if it should run now.
+   * Cron tick: every hour. For each FIXED schedule, decide if it should run now.
    */
-  async tick(): Promise<{ ran: number; total: number }> {
-    const all = await botScheduleRepository.listEnabled();
+  async tickFixed(): Promise<{ ran: number; total: number }> {
+    const all = await botScheduleRepository.listByType("fixed");
 
-    // Now in Asia/Bangkok
     const bkk    = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
     const curHour = bkk.getHours();
     const isoDow  = bkk.getDay() === 0 ? 7 : bkk.getDay();
@@ -494,13 +570,11 @@ export const botScheduleService = {
 
     let ran = 0;
     for (const s of all) {
-      // Time match
       const sendHour = Number(s.sendTime.split(":")[0] ?? "8");
       if (sendHour !== curHour) continue;
       if (!s.sendDays.includes(isoDow)) continue;
       if (s.sendDayOfMonth != null && s.sendDayOfMonth !== dom) continue;
 
-      // Dedupe
       const already = await botScheduleRepository.hasRunThisHour(s.id, dateIso, curHour);
       if (already) continue;
 
@@ -508,9 +582,59 @@ export const botScheduleService = {
         const result = await this.runSchedule(s);
         await botScheduleRepository.logRun(s.id, dateIso, curHour, result.recipients, result.failed);
         ran++;
-        logger.info({ scheduleId: s.id, name: s.name, ...result }, "bot_schedule.tick ran");
+        logger.info({ scheduleId: s.id, name: s.name, ...result }, "bot_schedule.tickFixed ran");
       } catch (err) {
-        logger.error({ err, scheduleId: s.id }, "bot_schedule.tick failed");
+        logger.error({ err, scheduleId: s.id }, "bot_schedule.tickFixed failed");
+      }
+    }
+    return { ran, total: all.length };
+  },
+
+  /**
+   * Cron tick: every minute. For each INTERVAL schedule within its time window.
+   * Lightweight — 99% of ticks return immediately after condition checks.
+   */
+  async tickInterval(): Promise<{ ran: number; total: number }> {
+    const all = await botScheduleRepository.listByType("interval");
+    if (all.length === 0) return { ran: 0, total: 0 };
+
+    const bkk     = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
+    const curHour = bkk.getHours();
+    const curMin  = bkk.getMinutes();
+    const isoDow  = bkk.getDay() === 0 ? 7 : bkk.getDay();
+    const dateIso = bkk.toISOString().slice(0, 10);
+
+    let ran = 0;
+    for (const s of all) {
+      // Day check
+      if (!s.sendDays.includes(isoDow)) continue;
+
+      // Window check
+      if (s.sendWindowStart && s.sendWindowEnd) {
+        const nowMinutes = curHour * 60 + curMin;
+        const [sh, sm] = (s.sendWindowStart ?? "09:00").split(":").map(Number);
+        const [eh, em] = (s.sendWindowEnd ?? "18:00").split(":").map(Number);
+        const startMin = sh * 60 + (sm ?? 0);
+        const endMin   = eh * 60 + (em ?? 0);
+        if (nowMinutes < startMin || nowMinutes >= endMin) continue;
+
+        // Interval check: is this minute aligned with the schedule?
+        const minutesFromStart = nowMinutes - startMin;
+        const interval = s.sendIntervalMinutes ?? 60;
+        if (minutesFromStart % interval !== 0) continue;
+      }
+
+      // Dedupe per-minute
+      const already = await botScheduleRepository.hasRunThisMinute(s.id, dateIso, curHour, curMin);
+      if (already) continue;
+
+      try {
+        const result = await this.runSchedule(s);
+        await botScheduleRepository.logRunMinute(s.id, dateIso, curHour, curMin, result.recipients, result.failed);
+        ran++;
+        logger.info({ scheduleId: s.id, name: s.name, ...result }, "bot_schedule.tickInterval ran");
+      } catch (err) {
+        logger.error({ err, scheduleId: s.id }, "bot_schedule.tickInterval failed");
       }
     }
     return { ran, total: all.length };

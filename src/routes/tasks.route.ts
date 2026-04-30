@@ -365,4 +365,23 @@ export const tasksRouter = new Hono()
     const user      = c.get("user");
     const extension = await taskService.createExtensionRequest(id, user.userId, data);
     return created(c, extension, "สร้างคำขอขยายเวลาสำเร็จ");
+  })
+
+  // POST /tasks/bulk — multi-select batch update (admin/manager only)
+  .post("/bulk", validate("json", z.object({
+    taskIds: z.array(z.string().uuid()).min(1).max(50),
+    updates: z.object({
+      listStatusId: z.string().uuid().optional(),
+      priority:     z.enum(["low","normal","high","urgent"]).optional(),
+      assigneeId:   z.string().uuid().optional(),
+      deadline:     z.string().optional().nullable(),
+    }),
+  })), async (c) => {
+    const user = c.get("user");
+    if (user.role !== "admin" && user.role !== "manager") {
+      return c.json({ success: false, message: "ไม่มีสิทธิ์", error: "FORBIDDEN" }, 403);
+    }
+    const body = c.req.valid("json" as never) as any;
+    const result = await taskService.bulkUpdate(body.taskIds, body.updates);
+    return ok(c, result, `อัปเดต ${result.updated} จาก ${result.total} task สำเร็จ`);
   });

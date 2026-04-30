@@ -162,11 +162,86 @@ export function startNotificationCron(): void {
     runStandupTick().catch((err) => logger.error({ err }, "cron.daily_standup tick failed"));
   }, { timezone: "Asia/Bangkok" });
 
-  // ทุกต้นชั่วโมง — เช็ค bot schedules ทั้งหมด (admin-defined recurring messages)
+  // ทุกต้นชั่วโมง — เช็ค bot schedules แบบ fixed (admin-defined recurring messages)
   cron.schedule("0 * * * *", () => {
-    botScheduleService.tick()
-      .then((r) => logger.info(r, "cron.bot_schedules tick completed"))
-      .catch((err) => logger.error({ err }, "cron.bot_schedules tick failed"));
+    botScheduleService.tickFixed()
+      .then((r) => logger.info(r, "cron.bot_schedules.tickFixed completed"))
+      .catch((err) => logger.error({ err }, "cron.bot_schedules.tickFixed failed"));
+  }, { timezone: "Asia/Bangkok" });
+
+  // ทุกนาที — เช็ค bot schedules แบบ interval (within time window)
+  cron.schedule("* * * * *", () => {
+    botScheduleService.tickInterval()
+      .catch((err) => logger.error({ err }, "cron.bot_schedules.tickInterval failed"));
+  }, { timezone: "Asia/Bangkok" });
+
+  // ── Recurring task generation ───────────────────────────────────────────
+  // Daily at midnight Bangkok — create copies of recurring tasks due today.
+  async function runRecurringTasksJob(): Promise<void> {
+    const now = new Date(new Date().toLocaleString("en-US", { timezone: "Asia/Bangkok" }));
+    const today = now.toISOString().slice(0, 10);
+    const isoDow = now.getDay() === 0 ? 7 : now.getDay();
+
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT t.id::text, t.title, t.description, t.list_id::text, t.assignee_id::text,
+             t.task_type_id::text, t.priority, t.time_estimate_hours::text,
+             t.story_points::text, t.list_status_id::text,
+             t.recurrence_rule, t.recurrence_interval, t.recurrence_days
+      FROM tasks t
+      WHERE t.deleted_at IS NULL AND t.is_recurring = true
+        AND t.recurrence_rule IS NOT NULL
+        AND (t.recurrence_end_date IS NULL OR t.recurrence_end_date >= '${today}'::date)
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks child
+          WHERE child.recurrence_parent_id = t.id
+            AND (child.created_at AT TIME ZONE 'Asia/Bangkok')::date = '${today}'::date
+        )
+    `));
+    const tasks = ((rows as any).rows ?? rows) as any[];
+
+    let created = 0;
+    for (const t of tasks) {
+      let shouldCreate = false;
+      if (t.recurrence_rule === "daily") {
+        shouldCreate = true;
+      } else if (t.recurrence_rule === "weekly") {
+        const days = Array.isArray(t.recurrence_days) ? t.recurrence_days.map(Number) : [];
+        shouldCreate = days.length === 0 || days.includes(isoDow);
+      } else if (t.recurrence_rule === "monthly") {
+        const dom = now.getDate();
+        shouldCreate = dom === (t.original_day ?? dom);
+      }
+      if (!shouldCreate) continue;
+
+      try {
+        await db.execute(sql.raw(`
+          INSERT INTO tasks (title, description, list_id, assignee_id, task_type_id,
+            priority, time_estimate_hours, story_points, list_status_id,
+            recurrence_parent_id, display_id)
+          VALUES (
+            '${(t.title || "").replace(/'/g, "''")}',
+            ${t.description ? `'${t.description.replace(/'/g, "''")}'` : "NULL"},
+            '${t.list_id}'::uuid,
+            ${t.assignee_id ? `'${t.assignee_id}'::uuid` : "NULL"},
+            ${t.task_type_id ? `'${t.task_type_id}'::uuid` : "NULL"},
+            ${t.priority ? `'${t.priority}'` : "NULL"},
+            ${t.time_estimate_hours ?? "NULL"},
+            ${t.story_points ?? "NULL"},
+            ${t.list_status_id ? `'${t.list_status_id}'::uuid` : "NULL"},
+            '${t.id}'::uuid,
+            (SELECT 'TK-' || LPAD(nextval('tasks_display_seq')::text, 6, '0'))
+          )
+        `));
+        created++;
+      } catch (err) {
+        logger.error({ err, taskId: t.id }, "recurring task creation failed");
+      }
+    }
+    if (created > 0) logger.info({ created }, "cron.recurring_tasks completed");
+  }
+
+  cron.schedule("0 0 * * *", () => {
+    runRecurringTasksJob().catch((err) => logger.error({ err }, "cron.recurring_tasks failed"));
   }, { timezone: "Asia/Bangkok" });
 
   // Run once on startup (for testing convenience)

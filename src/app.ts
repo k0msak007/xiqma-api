@@ -34,6 +34,8 @@ import { standupsRouter }          from "@/routes/standups.route.ts";
 import { lineRouter }              from "@/routes/line.route.ts";
 import { lineWebhookRouter }       from "@/routes/line-webhook.route.ts";
 import { botSchedulesRouter }      from "@/routes/bot-schedules.route.ts";
+import { taskTemplatesRouter }     from "@/routes/task-templates.route.ts";
+import { savedFiltersRouter }      from "@/routes/saved-filters.route.ts";
 import { healthRouter }            from "@/routes/health.route.ts";
 
 export const app = new Hono()
@@ -85,6 +87,8 @@ export const app = new Hono()
   .route("/api/line",                lineRouter)
   .route("/api/webhooks/line",       lineWebhookRouter)
   .route("/api/bot-schedules",       botSchedulesRouter)
+  .route("/api/task-templates",      taskTemplatesRouter)
+  .route("/api/saved-filters",       savedFiltersRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

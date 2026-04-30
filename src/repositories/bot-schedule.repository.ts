@@ -19,8 +19,15 @@ export interface BotSchedule {
   mode:              "static" | "ai";
   titleTemplate:     string;
   bodyTemplate:      string;
-  contextKind:       "today" | "yesterday" | "week" | "none" | "morning_briefing" | "leave_reminder" | "time_reminder";
+  contextKind:       "today" | "yesterday" | "week" | "none" | "morning_briefing" | "leave_reminder" | "time_reminder" | "weekly_hours";
   channels:          string[];
+  notifType:         string;
+  deepLink:          string | null;
+  // interval scheduling
+  sendIntervalType:    "fixed" | "interval";
+  sendIntervalMinutes: number | null;
+  sendWindowStart:     string | null;
+  sendWindowEnd:       string | null;
   notifType:         string;
   deepLink:          string | null;
   createdAt:         string;
@@ -46,6 +53,10 @@ function rowToSchedule(r: any): BotSchedule {
     channels:         Array.isArray(r.channels) ? r.channels.map((c: any) => String(c)) : [],
     notifType:        String(r.notif_type ?? "daily_summary"),
     deepLink:         r.deep_link ? String(r.deep_link) : null,
+    sendIntervalType:    (r.send_interval_type ?? "fixed") as BotSchedule["sendIntervalType"],
+    sendIntervalMinutes: r.send_interval_minutes != null ? Number(r.send_interval_minutes) : null,
+    sendWindowStart:     r.send_window_start ? String(r.send_window_start).slice(0, 5) : null,
+    sendWindowEnd:       r.send_window_end ? String(r.send_window_end).slice(0, 5) : null,
     createdAt:        r.created_at ? new Date(r.created_at).toISOString() : "",
     updatedAt:        r.updated_at ? new Date(r.updated_at).toISOString() : "",
   };
@@ -58,6 +69,10 @@ const COLS = `
   audience_type, audience_values, respect_work_days,
   mode, title_template, body_template, context_kind,
   channels, notif_type, deep_link,
+  send_interval_type,
+  send_interval_minutes,
+  send_window_start::text AS send_window_start,
+  send_window_end::text AS send_window_end,
   created_at, updated_at
 `;
 
@@ -73,6 +88,14 @@ export const botScheduleRepository = {
   async listEnabled(): Promise<BotSchedule[]> {
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       SELECT ${COLS} FROM bot_schedules WHERE enabled = true ORDER BY created_at
+    `));
+    const arr = ((rows as any).rows ?? rows) as any[];
+    return arr.map(rowToSchedule);
+  },
+
+  async listByType(type: "fixed" | "interval"): Promise<BotSchedule[]> {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT ${COLS} FROM bot_schedules WHERE enabled = true AND send_interval_type = '${type}' ORDER BY created_at
     `));
     const arr = ((rows as any).rows ?? rows) as any[];
     return arr.map(rowToSchedule);
@@ -118,6 +141,13 @@ export const botScheduleRepository = {
     if (input.channels !== undefined)        { cols.push("channels");        vals.push(`ARRAY[${input.channels.map((c) => `'${c}'`).join(",")}]::text[]`); }
     if (input.notifType !== undefined)       { cols.push("notif_type");      vals.push(`'${input.notifType}'`); }
     if (input.deepLink !== undefined)        { cols.push("deep_link");       vals.push(input.deepLink ? `'${input.deepLink.replace(/'/g, "''")}'` : "NULL"); }
+    if (input.sendIntervalType !== undefined) { cols.push("send_interval_type");    vals.push(`'${input.sendIntervalType}'`); }
+    if (input.sendIntervalMinutes !== undefined) {
+      cols.push("send_interval_minutes");
+      vals.push(input.sendIntervalMinutes != null ? String(input.sendIntervalMinutes) : "NULL");
+    }
+    if (input.sendWindowStart !== undefined)  { cols.push("send_window_start"); vals.push(input.sendWindowStart ? `'${input.sendWindowStart}'::time` : "NULL"); }
+    if (input.sendWindowEnd !== undefined)    { cols.push("send_window_end");   vals.push(input.sendWindowEnd ? `'${input.sendWindowEnd}'::time` : "NULL"); }
     if (createdBy)                           { cols.push("created_by");      vals.push(`'${createdBy}'::uuid`); }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -152,6 +182,10 @@ export const botScheduleRepository = {
     if (input.channels !== undefined)        sets.push(`channels = ARRAY[${input.channels.map((c) => `'${c}'`).join(",")}]::text[]`);
     if (input.notifType !== undefined)       sets.push(`notif_type = '${input.notifType}'`);
     if (input.deepLink !== undefined)        sets.push(input.deepLink ? `deep_link = '${input.deepLink.replace(/'/g, "''")}'` : "deep_link = NULL");
+    if (input.sendIntervalType !== undefined)    sets.push(`send_interval_type = '${input.sendIntervalType}'`);
+    if (input.sendIntervalMinutes !== undefined) sets.push(input.sendIntervalMinutes != null ? `send_interval_minutes = ${input.sendIntervalMinutes}` : "send_interval_minutes = NULL");
+    if (input.sendWindowStart !== undefined)     sets.push(input.sendWindowStart ? `send_window_start = '${input.sendWindowStart}'::time` : "send_window_start = NULL");
+    if (input.sendWindowEnd !== undefined)       sets.push(input.sendWindowEnd ? `send_window_end = '${input.sendWindowEnd}'::time` : "send_window_end = NULL");
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       UPDATE bot_schedules SET ${sets.join(", ")} WHERE id = '${id}'::uuid
@@ -227,11 +261,32 @@ export const botScheduleRepository = {
     return arr.length > 0;
   },
 
+  async hasRunThisMinute(scheduleId: string, dateIso: string, hour: number, minute: number): Promise<boolean> {
+    const rows = await db.execute<{ id: string }>(sql.raw(`
+      SELECT id FROM bot_schedule_runs
+      WHERE schedule_id = '${scheduleId}'::uuid
+        AND run_date = '${dateIso}'::date
+        AND run_hour = ${hour}
+        AND run_minute = ${minute}
+      LIMIT 1
+    `));
+    const arr = (((rows as any).rows ?? rows) as any[]);
+    return arr.length > 0;
+  },
+
   async logRun(scheduleId: string, dateIso: string, hour: number, recipients: number, failed: number): Promise<void> {
     await db.execute(sql.raw(`
       INSERT INTO bot_schedule_runs (schedule_id, run_date, run_hour, recipients, failed)
       VALUES ('${scheduleId}'::uuid, '${dateIso}'::date, ${hour}, ${recipients}, ${failed})
       ON CONFLICT (schedule_id, run_date, run_hour) DO NOTHING
+    `));
+  },
+
+  async logRunMinute(scheduleId: string, dateIso: string, hour: number, minute: number, recipients: number, failed: number): Promise<void> {
+    await db.execute(sql.raw(`
+      INSERT INTO bot_schedule_runs (schedule_id, run_date, run_hour, run_minute, recipients, failed)
+      VALUES ('${scheduleId}'::uuid, '${dateIso}'::date, ${hour}, ${minute}, ${recipients}, ${failed})
+      ON CONFLICT (schedule_id, run_date, run_hour, run_minute) DO NOTHING
     `));
   },
 };

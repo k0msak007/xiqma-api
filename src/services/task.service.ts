@@ -9,6 +9,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db.ts";
 import { emitNotification } from "@/lib/notification/dispatcher.ts";
 import { normalizeRecipients } from "@/lib/notification/events.ts";
+import { embedText, createEmbedding, toVectorLiteral } from "@/lib/embedding.ts";
+import { logger } from "@/lib/logger.ts";
 
 // Returns the status_type for a list_status_id, or null.
 async function getStatusType(listStatusId: string | null | undefined): Promise<string | null> {
@@ -134,6 +136,25 @@ import type {
   RejectExtensionInput,
 } from "@/validators/task.validator.ts";
 
+// ── Embedding fire-and-forget helper ───────────────────────────────────────
+async function embedTaskAsync(taskId: string, title: string, description?: string | null) {
+  try {
+    const text = embedText({ title, description });
+    if (!text) return;
+    const embedding = await createEmbedding(text);
+    const vec = toVectorLiteral(embedding);
+    await db.execute(sql.raw(`
+      INSERT INTO task_embeddings (task_id, embedding, updated_at)
+      VALUES ('${taskId}'::uuid, ${vec}, NOW())
+      ON CONFLICT (task_id) DO UPDATE SET embedding = ${vec}, updated_at = NOW()
+    `));
+    logger.info({ taskId }, "embedding stored");
+  } catch (err) {
+    logger.warn({ err, taskId }, "embedding generation failed (non-fatal)");
+    void err;
+  }
+}
+
 export const taskService = {
   // ── Tasks ─────────────────────────────────────────────────────────────────────
 
@@ -198,6 +219,9 @@ export const taskService = {
     }
     const task = await taskRepository.create(data, creatorId);
 
+    // 🔌 Embed task for semantic search (fire-and-forget — failure is non-fatal)
+    embedTaskAsync((task as any).id as string, data.title, data.description).catch(() => {});
+
     // 🔔 Notify assignee + their manager + all admins (skip actor)
     const taskId = (task as any).id as string;
     const displayId = (task as any).display_id as string | undefined;
@@ -235,6 +259,13 @@ export const taskService = {
       (!oldType || !TERMINAL_STATUS_TYPES.has(oldType));
 
     const updated = await taskRepository.update(id, data);
+
+    // 🔌 Re-embed if title or description changed (fire-and-forget)
+    if (data.title !== undefined || data.description !== undefined) {
+      const freshTitle = (updated as any)?.title ?? (task as any)?.title ?? "";
+      const freshDesc  = (updated as any)?.description ?? (task as any)?.description ?? null;
+      embedTaskAsync(id, freshTitle, freshDesc).catch(() => {});
+    }
 
     // 🔔 If assignee changed → notify new assignee + their manager + admins
     const oldAssignee = (task as any).assignee_id as string | undefined;
@@ -883,5 +914,18 @@ export const taskService = {
     const task = await taskRepository.findById(taskId);
     if (!task) throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ task id: ${taskId}`, 404);
     return taskRepository.moveTask(taskId, toListId);
+  },
+
+  async bulkUpdate(taskIds: string[], updates: Record<string, any>) {
+    let updated = 0;
+    for (const id of taskIds) {
+      try {
+        await taskRepository.update(id, updates);
+        updated++;
+      } catch (err) {
+        logger.warn({ err, taskId: id }, "bulkUpdate skip");
+      }
+    }
+    return { total: taskIds.length, updated, failed: taskIds.length - updated };
   },
 };

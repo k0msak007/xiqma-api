@@ -23,10 +23,14 @@ const upsertBody = z.object({
   mode:             z.enum(["static", "ai"]),
   titleTemplate:    z.string().min(1).max(200),
   bodyTemplate:     z.string().min(1).max(3000),
-  contextKind:      z.enum(["today", "yesterday", "week", "none", "morning_briefing", "leave_reminder", "time_reminder"]),
+  contextKind:      z.enum(["today", "yesterday", "week", "none", "morning_briefing", "leave_reminder", "time_reminder", "weekly_hours"]),
   channels:         z.array(z.enum(["in_app", "line", "email"])).min(1),
   notifType:        z.string().optional(),
   deepLink:         z.string().max(200).optional().nullable(),
+  sendIntervalType:    z.enum(["fixed", "interval"]).optional(),
+  sendIntervalMinutes: z.number().int().min(0).max(1440).optional().nullable(),
+  sendWindowStart:     z.string().max(5).optional().nullable(),
+  sendWindowEnd:       z.string().max(5).optional().nullable(),
 });
 
 const requireAdmin = (c: any) => {

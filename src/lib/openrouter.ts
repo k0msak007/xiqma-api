@@ -8,8 +8,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: ToolCall[];
+}
+
+export interface Tool {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 export interface ChatCompleteOptions {
@@ -19,12 +31,21 @@ export interface ChatCompleteOptions {
   maxTokens?: number;
   /** Hint for providers that support OpenAI-style JSON mode */
   responseFormat?: "json_object";
+  tools?: Tool[];
+  toolChoice?: "auto" | "none" | { type: "function"; function: { name: string } };
+}
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
 }
 
 export interface ChatCompletionResult {
   text: string;
   model: string;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  toolCalls?: ToolCall[];
 }
 
 const DEFAULT_MODEL = "anthropic/claude-3.5-sonnet";
@@ -53,6 +74,9 @@ export async function chatComplete(opts: ChatCompleteOptions): Promise<ChatCompl
       max_tokens:  opts.maxTokens ?? 1500,
       ...(opts.responseFormat === "json_object"
         ? { response_format: { type: "json_object" } }
+        : {}),
+      ...(opts.tools?.length
+        ? { tools: opts.tools, tool_choice: opts.toolChoice ?? "auto" }
         : {}),
     }),
   });
@@ -105,6 +129,18 @@ export async function chatComplete(opts: ChatCompleteOptions): Promise<ChatCompl
     );
   }
 
+  // Extract tool_calls if present
+  const toolCalls: ToolCall[] | undefined = message?.tool_calls?.length
+    ? message.tool_calls.map((tc: any) => ({
+        id:       tc.id ?? "",
+        type:     tc.type ?? "function",
+        function: {
+          name:      tc.function?.name ?? "",
+          arguments: tc.function?.arguments ?? "{}",
+        },
+      }))
+    : undefined;
+
   return {
     text,
     model: json?.model ?? model,
@@ -115,5 +151,6 @@ export async function chatComplete(opts: ChatCompleteOptions): Promise<ChatCompl
           totalTokens:      Number(json.usage.total_tokens ?? 0),
         }
       : undefined,
+    toolCalls,
   };
 }
