@@ -727,6 +727,25 @@ export const taskService = {
     await taskRepository.deleteAttachment(attachmentId);
   },
 
+  async getSignedDownloadUrl(attachmentId: string): Promise<string> {
+    const attachment = await taskRepository.findAttachmentById(attachmentId);
+    if (!attachment) throw new AppError(ErrorCode.NOT_FOUND, "ไม่พบไฟล์แนบ", 404);
+
+    const url = new URL(attachment.fileUrl);
+    const pathParts = url.pathname.split(`/${ATTACHMENTS_BUCKET}/`);
+    const filePath = pathParts.length > 1 ? pathParts[1] : null;
+    if (!filePath) throw new AppError(ErrorCode.INTERNAL_ERROR, "path ไม่ถูกต้อง", 500);
+
+    const { data, error } = await supabase.storage
+      .from(ATTACHMENTS_BUCKET)
+      .createSignedUrl(filePath, 15 * 60);
+
+    if (error || !data?.signedUrl) {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, `สร้าง signed URL ไม่สำเร็จ: ${error?.message ?? "unknown"}`, 500);
+    }
+    return data.signedUrl;
+  },
+
   // ── Extension Requests ────────────────────────────────────────────────────────
 
   async listExtensionRequests(taskId: string) {

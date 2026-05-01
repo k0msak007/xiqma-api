@@ -39,14 +39,16 @@ export const listsRouter = new Hono()
   .put("/:id", validate("param", idParamSchema), validate("json", updateListSchema), async (c) => {
     const { id } = c.req.valid("param");
     const data = c.req.valid("json");
-    const list = await listService.update(id, data);
+    const user = c.get("user");
+    const list = await listService.update(id, data, user.userId, user.role === "admin");
     return ok(c, list, "แก้ไข list สำเร็จ");
   })
 
   // DELETE /lists/:id
   .delete("/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    await listService.delete(id);
+    const user = c.get("user");
+    await listService.delete(id, user.userId, user.role === "admin");
     return ok(c, null, "ลบ list สำเร็จ");
   })
 
@@ -61,15 +63,17 @@ export const listsRouter = new Hono()
   .post("/:id/statuses", validate("param", idParamSchema), validate("json", createStatusSchema), async (c) => {
     const { id } = c.req.valid("param");
     const data = c.req.valid("json");
-    const status = await listService.createStatus(id, data);
+    const user = c.get("user");
+    const status = await listService.createStatus(id, data, user.userId, user.role === "admin");
     return created(c, status, "สร้าง status สำเร็จ");
   })
 
-  // PUT /lists/:id/statuses/reorder  (must come BEFORE /:id/statuses/:statusId to avoid route conflict)
+  // PUT /lists/:id/statuses/reorder
   .put("/:id/statuses/reorder", validate("param", idParamSchema), validate("json", reorderStatusSchema), async (c) => {
     const { id } = c.req.valid("param");
     const data = c.req.valid("json");
-    const statuses = await listService.reorderStatuses(id, data);
+    const user = c.get("user");
+    const statuses = await listService.reorderStatuses(id, data, user.userId, user.role === "admin");
     return ok(c, statuses, "เรียงลำดับ status สำเร็จ");
   })
 
@@ -77,13 +81,15 @@ export const listsRouter = new Hono()
   .put("/:id/statuses/:statusId", validate("param", statusParamSchema), validate("json", updateStatusSchema), async (c) => {
     const { id, statusId } = c.req.valid("param");
     const data = c.req.valid("json");
-    const status = await listService.updateStatus(id, statusId, data);
+    const user = c.get("user");
+    const status = await listService.updateStatus(id, statusId, data, user.userId, user.role === "admin");
     return ok(c, status, "แก้ไข status สำเร็จ");
   })
 
   // DELETE /lists/:id/statuses/:statusId
   .delete("/:id/statuses/:statusId", validate("param", statusParamSchema), async (c) => {
     const { id, statusId } = c.req.valid("param");
-    await listService.deleteStatus(id, statusId);
+    const user = c.get("user");
+    await listService.deleteStatus(id, statusId, user.userId, user.role === "admin");
     return ok(c, null, "ลบ status สำเร็จ");
   });

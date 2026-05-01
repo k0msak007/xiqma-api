@@ -94,11 +94,11 @@ export const taskRepository = {
   async findMy(userId: string, range?: string) {
     let rangeCondition = "";
     if (range === "today") {
-      rangeCondition = "AND t.deadline::date = CURRENT_DATE";
+      rangeCondition = "AND (t.created_at AT TIME ZONE 'Asia/Bangkok')::date = (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')::date";
     } else if (range === "week") {
-      rangeCondition = "AND t.deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'";
+      rangeCondition = "AND t.created_at >= ((CURRENT_DATE - INTERVAL '7 days') AT TIME ZONE 'Asia/Bangkok')";
     } else if (range === "month") {
-      rangeCondition = "AND t.deadline BETWEEN NOW() AND NOW() + INTERVAL '30 days'";
+      rangeCondition = "AND t.created_at >= ((CURRENT_DATE - INTERVAL '30 days') AT TIME ZONE 'Asia/Bangkok')";
     }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -117,7 +117,6 @@ export const taskRepository = {
       LEFT JOIN list_statuses ls ON t.list_status_id = ls.id
       LEFT JOIN lists l ON t.list_id = l.id
       WHERE t.assignee_id = '${userId}'::uuid
-        AND t.status NOT IN ('completed','cancelled')
         AND t.deleted_at IS NULL
         ${rangeCondition}
       ORDER BY t.deadline ASC NULLS LAST

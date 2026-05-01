@@ -40,19 +40,31 @@ export const spaceService = {
     return spaceRepository.update(id, data);
   },
 
-  async delete(id: string) {
+  async delete(id: string, userId: string, isAdmin: boolean) {
     const space = await spaceRepository.findById(id);
     if (!space) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ space id: ${id}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(id, userId);
+      if (!isMember) {
+        throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+      }
     }
     // Cascade delete: tasks → list_statuses → lists → folders → members → space
     await spaceRepository.delete(id);
   },
 
-  async addMembers(spaceId: string, data: AddMembersInput) {
+  async addMembers(spaceId: string, data: AddMembersInput, userId: string, isAdmin: boolean) {
     const space = await spaceRepository.findById(spaceId);
     if (!space) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ space id: ${spaceId}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(spaceId, userId);
+      if (!isMember) {
+        throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+      }
     }
     // Validate all employee IDs exist and are active
     for (const eid of data.employeeIds) {
@@ -64,10 +76,16 @@ export const spaceService = {
     await spaceRepository.addMembers(spaceId, data.employeeIds);
   },
 
-  async removeMember(spaceId: string, employeeId: string) {
+  async removeMember(spaceId: string, employeeId: string, userId: string, isAdmin: boolean) {
     const space = await spaceRepository.findById(spaceId);
     if (!space) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ space id: ${spaceId}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(spaceId, userId);
+      if (!isMember) {
+        throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+      }
     }
     await spaceRepository.removeMember(spaceId, employeeId);
   },

@@ -308,6 +308,66 @@ async function execGetTeamWorkload(_args: Record<string, unknown>, ctx: UserCont
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TOOL 7: get_employee_leave — check leave/availability
+// ═══════════════════════════════════════════════════════════════════════════
+async function execGetEmployeeLeave(args: Record<string, unknown>, ctx: UserContext): Promise<string> {
+  const employeeName = String(args.employee_name ?? "ฉัน");
+  const emp = await resolveEmployee(employeeName, ctx);
+  if (!emp) return JSON.stringify({ error: `ไม่พบพนักงาน "${employeeName}"` });
+
+  const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+    SELECT lr.leave_type AS type, lr.start_date::text AS start_date, lr.end_date::text AS end_date,
+           lr.status, lr.reason,
+           lr.total_days AS days
+    FROM leave_requests lr
+    JOIN employees e ON lr.employee_id = e.id
+    WHERE e.id = '${emp.id}'::uuid AND lr.status = 'approved'
+      AND lr.end_date >= CURRENT_DATE
+    ORDER BY lr.start_date LIMIT 10
+  `));
+  const leaves = ((rows as any).rows ?? rows) as any[];
+
+  return JSON.stringify({
+    employee: emp.name,
+    upcoming_leaves: leaves.map((l: any) => ({
+      type: l.type, start: l.start_date, end: l.end_date, days: l.days, reason: l.reason,
+    })),
+  has_upcoming_leave: leaves.length > 0,
+});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOL 8: get_team_leave — list all upcoming leaves in scope
+// ═══════════════════════════════════════════════════════════════════════════
+async function execGetTeamLeave(_args: Record<string, unknown>, ctx: UserContext): Promise<string> {
+  const scope = ctx.role === "admin" ? "" : ctx.role === "manager"
+    ? `AND (e.id = '${ctx.userId}'::uuid OR e.manager_id = '${ctx.userId}'::uuid)`
+    : `AND e.id = '${ctx.userId}'::uuid`;
+
+  // Next 14 days
+  const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+    SELECT e.name, lr.leave_type AS type, lr.start_date::text, lr.end_date::text,
+           lr.total_days AS days, lr.reason
+    FROM leave_requests lr
+    JOIN employees e ON lr.employee_id = e.id
+    WHERE lr.status = 'approved'
+      AND lr.start_date <= (CURRENT_DATE + INTERVAL '14 days')
+      AND lr.end_date >= CURRENT_DATE
+      ${scope}
+    ORDER BY lr.start_date LIMIT 20
+  `));
+  const leaves = ((rows as any).rows ?? rows) as any[];
+
+  return JSON.stringify({
+    period: "14 days from today",
+    count: leaves.length,
+    leaves: leaves.map((l: any) => ({
+      name: l.name, type: l.type, start: l.start_date, end: l.end_date, days: l.days, reason: l.reason,
+    })),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Tool registry
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -388,6 +448,28 @@ const TOOLS: Tool[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_employee_leave",
+      description: "ดูตารางวันลาของพนักงาน — ว่างวันไหน มีลาครั้งต่อไปเมื่อไหร่ ใช้วันไหน — ใช้เช็ค availability",
+      parameters: {
+        type: "object",
+        properties: {
+          employee_name: { type: "string", description: "ชื่อพนักงาน หรือ 'ฉัน'/'me' สำหรับตัวเอง" },
+        },
+        required: ["employee_name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_team_leave",
+      description: "ดูว่าในทีมมีใครลาบ้างในช่วง 14 วันข้างหน้า — เหมาะกับคำถาม 'อาทิตย์หน้าใครลา' หรือ 'มีใครหยุดบ้าง'",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
 const TOOL_EXECUTORS: Record<string, (args: Record<string, unknown>, ctx: UserContext) => Promise<string>> = {
@@ -397,25 +479,34 @@ const TOOL_EXECUTORS: Record<string, (args: Record<string, unknown>, ctx: UserCo
   search_tasks:        execSearchTasks,
   list_overdue:        execListOverdue,
   get_team_workload:   execGetTeamWorkload,
+  get_employee_leave:  execGetEmployeeLeave,
+  get_team_leave:      execGetTeamLeave,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Q&A Pipeline
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `คุณคือเลขาผู้บริหารในระบบ Xiqma — ตอบคำถามเกี่ยวกับงานและทีม
-กฎ:
-1. ตอบสั้น ตรงประเด็น เป็นภาษาไทย — ไม่ต้องอธิบายว่าทำอะไร
-2. เรียก tool ทันทีที่มีข้อมูลพอ — ไม่ต้องคิดวน ไม่ต้องถามกลับ
-3. ใช้ข้อมูลจาก tool เท่านั้น — ห้ามแต่ง ห้ามเดา
-4. ถ้า tool ไม่มีข้อมูลที่ต้องการ → บอกตรงๆ ว่า "ขออภัย ไม่มีข้อมูลนี้ในระบบ"
+const SYSTEM_PROMPT = `คุณคือเลขาใน Xiqma — user เห็นทุกคำที่คุณพิมพ์
+
+⚠️ กฎข้อ 0 (สำคัญที่สุด): ห้ามพูดคิดในใจ ห้ามบอกว่าทำอะไรอยู่ ห้ามใช้คำว่า "ผู้ใช้ถาม" "ฉันจะ" "ก่อนอื่น" "มาดูกัน" — ตอบผลลัพธ์ตรงๆ เหมือนพิมพ์ข้อความหาเจ้านาย
+
+กฎอื่น:
+1. ตอบสั้น ตรงประเด็น เป็นภาษาไทย
+2. เรียก tool ทันที — ไม่ต้องถามกลับ
+3. ข้อมูลจาก tool เท่านั้น ห้ามเดา
+4. ถ้า tool คืน list ว่าง → แปลว่าไม่มีสิ่งนั้น:
+   - ไม่มี leave → "Jane ยังไม่มีการลาในช่วงนี้"
+   - ไม่มี overdue → "ไม่มีงานเกินกำหนดเลย"
 5. ถ้าถามว่า "ใคร" → เรียก tool ที่ให้รายชื่อ
    ถ้าถามว่า "กี่งาน" → เรียก tool ที่ให้ตัวเลข
-   ถ้าถามว่า "อะไรค้าง" → เรียก get_employee_tasks status=incomplete
-   ถ้าถามว่า "ทีม" → เรียก get_team_workload
-   ถ้าถามถึงตัวเอง → ใช้ 'ฉัน' เป็น employee_name
-6. จัดรูปแบบคำตอบให้น่าอ่าน — ใช้ emoji, bullet list ถ้าข้อมูลเยอะ
-7. ถ้ามีงานเกินกำหนด → เตือนเป็น priority แรก`;
+   ถ้าถามว่า "อะไรค้าง" → get_employee_tasks status=incomplete
+   ถ้าถามว่า "ทีม" → get_team_workload
+   ถ้าถามว่า "ว่าง / ลา / leave / หยุด" → get_employee_leave
+   ถ้าถามว่า "อาทิตย์หน้าใครลา" → get_team_leave
+   ถ้าถามตัวเอง → 'ฉัน'
+6. emoji, bullet list ถ้าข้อมูลเยอะ
+7. งานเกินกำหนด = priority แรก`;
 
 export interface QaResult {
   answer: string;
@@ -425,77 +516,73 @@ export interface QaResult {
 
 export const aiQaService = {
   async ask(question: string, user: UserContext): Promise<QaResult> {
+    const MAX_ROUNDS = parseInt(process.env.AI_QA_MAX_ROUNDS ?? "3", 10);
     const contextNote = user.role === "admin"
       ? "ข้อมูลทั้งหมดในระบบ"
       : "ข้อมูลเฉพาะทีมของคุณ";
 
     const messages: ChatMessage[] = [
-      { role: "system", content: `${SYSTEM_PROMPT}\n\nผู้ใช้: ${user.name} (${user.role})\nขอบเขต: ${contextNote}` },
+      { role: "system", content: `${SYSTEM_PROMPT}\n\nผู้ใช้: ${user.name} (${user.role})\nขอบเขต: ${contextNote}\n\n💡 เรียก tool ได้หลายตัวพร้อมกันในการเรียกครั้งเดียว — ถ้าคำถามต้องการข้อมูลหลายอย่าง ให้เรียกทุกตัวที่จำเป็นเลย` },
       { role: "user", content: question },
     ];
 
-    // First call — LLM may return tool_calls
-    const result1 = await chatComplete({
-      messages,
-      temperature: 0.2,
-      maxTokens: 2000,
-      tools: TOOLS,
-      toolChoice: "auto",
-    });
+    let finalText = "";
+    let finalModel = "";
+    const allToolsCalled: string[] = [];
 
-    // If no tool calls, return the answer directly
-    if (!result1.toolCalls?.length) {
-      return { answer: result1.text || "ขออภัย ไม่สามารถตอบได้ในขณะนี้", model: result1.model };
-    }
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
+      const result = await chatComplete({
+        messages,
+        temperature: 0.2,
+        maxTokens: 2000,
+        tools: TOOLS,
+        toolChoice: "auto",
+      });
 
-    // Execute all tool calls
-    const toolCallsMade: string[] = [];
-    const toolAssistantMsg: ChatMessage = {
-      role: "assistant",
-      content: result1.text || "",
-      tool_calls: result1.toolCalls,
-    };
+      finalModel = result.model;
 
-    const toolResultMsgs: ChatMessage[] = [];
+      // No tool calls → this is the final answer
+      if (!result.toolCalls?.length) {
+        finalText = result.text || finalText || "ขออภัย ไม่สามารถตอบได้ในขณะนี้";
+        break;
+      }
 
-    for (const tc of result1.toolCalls) {
-      const name = tc.function.name;
-      const args = JSON.parse(tc.function.arguments || "{}");
-      const executor = TOOL_EXECUTORS[name];
+      // Execute all tool calls in parallel
+      const toolResults: ChatMessage[] = await Promise.all(
+        result.toolCalls.map(async (tc) => {
+          const executor = TOOL_EXECUTORS[tc.function.name];
+          if (!executor) return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: `unknown tool: ${tc.function.name}` }) };
 
-      if (executor) {
-        toolCallsMade.push(name);
-        try {
-          const content = await executor(args, user);
-          toolResultMsgs.push({
-            role: "tool",
-            tool_call_id: tc.id,
-            name,
-            content,
-          });
-        } catch (err: any) {
-          logger.error({ err, tool: name }, "qa tool execution failed");
-          toolResultMsgs.push({
-            role: "tool",
-            tool_call_id: tc.id,
-            name,
-            content: JSON.stringify({ error: err.message }),
-          });
-        }
+          allToolsCalled.push(tc.function.name);
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            const content = await executor(args, user);
+            return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content };
+          } catch (err: any) {
+            logger.error({ err, tool: tc.function.name }, "qa tool execution failed");
+            return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: err.message }) };
+          }
+        })
+      );
+
+      // Append assistant tool calls + tool results to conversation
+      messages.push({ role: "assistant", content: result.text || "", tool_calls: result.toolCalls });
+      messages.push(...toolResults);
+
+      // If last round → force a final answer
+      if (round === MAX_ROUNDS) {
+        finalText = (await chatComplete({
+          messages,
+          temperature: 0.2,
+          maxTokens: 800,
+        })).text || "กรุณาถามใหม่ให้เจาะจงขึ้น";
       }
     }
 
-    // Second call — send tool results back to LLM for final answer
-    const result2 = await chatComplete({
-      messages: [...messages, toolAssistantMsg, ...toolResultMsgs],
-      temperature: 0.3,
-      maxTokens: 1500,
-    });
-
     return {
-      answer: result2.text || "กำลังประมวลผล — ถามต่อได้",
-      model: result2.model,
-      toolCallsMade,
+      answer: finalText || "ขออภัย ไม่สามารถตอบได้ในขณะนี้",
+      model: finalModel,
+      toolCallsMade: allToolsCalled.length > 0 ? allToolsCalled : undefined,
     };
   },
 };

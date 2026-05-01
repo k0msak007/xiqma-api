@@ -35,27 +35,31 @@ export const foldersRouter = new Hono()
   .put("/:id", validate("param", idParamSchema), validate("json", updateFolderSchema), async (c) => {
     const { id } = c.req.valid("param");
     const data = c.req.valid("json");
-    const folder = await folderService.update(id, data);
+    const user = c.get("user");
+    const folder = await folderService.update(id, data, user.userId, user.role === "admin");
     return ok(c, folder, "แก้ไข folder สำเร็จ");
   })
 
   // PATCH /folders/:id/archive
   .patch("/:id/archive", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const folder = await folderService.archive(id);
+    const user = c.get("user");
+    const folder = await folderService.archive(id, user.userId, user.role === "admin");
     return ok(c, folder, "archive folder สำเร็จ");
   })
 
   // PATCH /folders/:id/restore
   .patch("/:id/restore", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    const folder = await folderService.restore(id);
+    const user = c.get("user");
+    const folder = await folderService.restore(id, user.userId, user.role === "admin");
     return ok(c, folder, "restore folder สำเร็จ");
   })
 
   // DELETE /folders/:id
   .delete("/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    await folderService.delete(id);
+    const user = c.get("user");
+    await folderService.delete(id, user.userId, user.role === "admin");
     return ok(c, null, "ลบ folder สำเร็จ");
   });

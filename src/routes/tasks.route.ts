@@ -251,6 +251,13 @@ export const tasksRouter = new Hono()
     return ok(c, null, "ลบ attachment สำเร็จ");
   })
 
+  // GET /tasks/:id/attachments/:attachmentId/download — signed URL proxy
+  .get("/:id/attachments/:attachmentId/download", validate("param", attachmentParamSchema), async (c) => {
+    const { attachmentId } = c.req.valid("param");
+    const url = await taskService.getSignedDownloadUrl(attachmentId);
+    return c.redirect(url);
+  })
+
   // ── Time Tracking ─────────────────────────────────────────────────────────────
 
   // POST /tasks/:id/time/start

@@ -21,7 +21,7 @@ export const listQuerySchema = z.object({
 export const createStatusSchema = z.object({
   name:  z.string().min(1).max(100),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#6b7280"),
-  type:  z.enum(["open", "in_progress", "review", "done", "closed"]),
+  type:  z.enum(["open", "in_progress", "paused", "review", "done", "closed", "cancelled", "blocked"]),
 });
 
 export const updateStatusSchema = z.object({

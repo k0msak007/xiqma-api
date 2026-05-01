@@ -31,20 +31,27 @@ export const listService = {
     return listRepository.create(data);
   },
 
-  async update(id: string, data: UpdateListInput) {
+  async update(id: string, data: UpdateListInput, userId: string, isAdmin: boolean) {
     const list = await listRepository.findById(id);
     if (!list) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ list id: ${id}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(list.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
     }
     return listRepository.update(id, data);
   },
 
-  async delete(id: string) {
+  async delete(id: string, userId: string, isAdmin: boolean) {
     const list = await listRepository.findById(id);
     if (!list) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ list id: ${id}`, 404);
     }
-    // Cascade: soft-delete tasks → delete list_statuses → delete list
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(list.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+    }
     await listRepository.delete(id);
   },
 
@@ -57,26 +64,44 @@ export const listService = {
     return listRepository.findStatuses(listId);
   },
 
-  async createStatus(listId: string, data: CreateStatusInput) {
+  async createStatus(listId: string, data: CreateStatusInput, userId: string, isAdmin: boolean) {
     const list = await listRepository.findById(listId);
     if (!list) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ list id: ${listId}`, 404);
     }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(list.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+    }
     return listRepository.createStatus(listId, data);
   },
 
-  async updateStatus(listId: string, statusId: string, data: UpdateStatusInput) {
+  async updateStatus(listId: string, statusId: string, data: UpdateStatusInput, userId: string, isAdmin: boolean) {
     const status = await listRepository.findStatusById(statusId);
     if (!status || status.listId !== listId) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ status id: ${statusId} ใน list นี้`, 404);
     }
+    if (!isAdmin) {
+      const list = await listRepository.findById(listId);
+      if (list) {
+        const isMember = await spaceRepository.isMember(list.spaceId, userId);
+        if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+      }
+    }
     return listRepository.updateStatus(statusId, data);
   },
 
-  async deleteStatus(listId: string, statusId: string) {
+  async deleteStatus(listId: string, statusId: string, userId: string, isAdmin: boolean) {
     const status = await listRepository.findStatusById(statusId);
     if (!status || status.listId !== listId) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ status id: ${statusId} ใน list นี้`, 404);
+    }
+    if (!isAdmin) {
+      const list = await listRepository.findById(listId);
+      if (list) {
+        const isMember = await spaceRepository.isMember(list.spaceId, userId);
+        if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+      }
     }
     const inUse = await listRepository.countTasksInStatus(statusId);
     if (inUse > 0) {
@@ -85,12 +110,15 @@ export const listService = {
     await listRepository.deleteStatus(statusId);
   },
 
-  async reorderStatuses(listId: string, data: ReorderStatusInput) {
+  async reorderStatuses(listId: string, data: ReorderStatusInput, userId: string, isAdmin: boolean) {
     const list = await listRepository.findById(listId);
     if (!list) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ list id: ${listId}`, 404);
     }
-    // Validate all IDs belong to this list
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(list.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+    }
     const existingStatuses = await listRepository.findStatuses(listId);
     const existingIds = new Set(existingStatuses.map(s => s.id));
     for (const sid of data.orderedIds) {

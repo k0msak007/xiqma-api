@@ -162,10 +162,9 @@ export function startNotificationCron(): void {
     runStandupTick().catch((err) => logger.error({ err }, "cron.daily_standup tick failed"));
   }, { timezone: "Asia/Bangkok" });
 
-  // ทุกต้นชั่วโมง — เช็ค bot schedules แบบ fixed (admin-defined recurring messages)
-  cron.schedule("0 * * * *", () => {
+  // ทุกนาที — เช็ค bot schedules แบบ fixed (lightweight: most minutes skip immediately)
+  cron.schedule("* * * * *", () => {
     botScheduleService.tickFixed()
-      .then((r) => logger.info(r, "cron.bot_schedules.tickFixed completed"))
       .catch((err) => logger.error({ err }, "cron.bot_schedules.tickFixed failed"));
   }, { timezone: "Asia/Bangkok" });
 

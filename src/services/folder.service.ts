@@ -28,36 +28,51 @@ export const folderService = {
     return folderRepository.create(data);
   },
 
-  async update(id: string, data: UpdateFolderInput) {
+  async update(id: string, data: UpdateFolderInput, userId: string, isAdmin: boolean) {
     const folder = await folderRepository.findById(id);
     if (!folder) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ folder id: ${id}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(folder.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
     }
     return folderRepository.update(id, data);
   },
 
-  async archive(id: string) {
+  async archive(id: string, userId: string, isAdmin: boolean) {
     const folder = await folderRepository.findById(id);
     if (!folder) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ folder id: ${id}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(folder.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
     }
     return folderRepository.archive(id);
   },
 
-  async restore(id: string) {
+  async restore(id: string, userId: string, isAdmin: boolean) {
     const folder = await folderRepository.findById(id);
     if (!folder) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ folder id: ${id}`, 404);
+    }
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(folder.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
     }
     return folderRepository.restore(id);
   },
 
-  async delete(id: string) {
+  async delete(id: string, userId: string, isAdmin: boolean) {
     const folder = await folderRepository.findById(id);
     if (!folder) {
       throw new AppError(ErrorCode.NOT_FOUND, `ไม่พบ folder id: ${id}`, 404);
     }
-    // Cascade: soft-delete tasks → delete list_statuses → delete lists → delete folder
+    if (!isAdmin) {
+      const isMember = await spaceRepository.isMember(folder.spaceId, userId);
+      if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
+    }
     await folderRepository.delete(id);
   },
 };

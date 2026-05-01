@@ -36,6 +36,8 @@ import { lineWebhookRouter }       from "@/routes/line-webhook.route.ts";
 import { botSchedulesRouter }      from "@/routes/bot-schedules.route.ts";
 import { taskTemplatesRouter }     from "@/routes/task-templates.route.ts";
 import { savedFiltersRouter }      from "@/routes/saved-filters.route.ts";
+import { customFieldsRouter }      from "@/routes/custom-fields.route.ts";
+import { shareLinksRouter, publicShareRouter } from "@/routes/share-links.route.ts";
 import { healthRouter }            from "@/routes/health.route.ts";
 
 export const app = new Hono()
@@ -89,6 +91,9 @@ export const app = new Hono()
   .route("/api/bot-schedules",       botSchedulesRouter)
   .route("/api/task-templates",      taskTemplatesRouter)
   .route("/api/saved-filters",       savedFiltersRouter)
+  .route("/api/custom-fields",       customFieldsRouter)
+  .route("/",                        shareLinksRouter)
+  .route("/",                        publicShareRouter)
   // ── Error handler (must be last) ─────────────────────────────
   .onError(errorMiddleware);
 

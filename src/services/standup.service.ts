@@ -7,6 +7,7 @@ import {
   type StandupSettings,
 } from "@/repositories/standup.repository.ts";
 import { chatComplete, type ChatMessage } from "@/lib/openrouter.ts";
+import { logger } from "@/lib/logger.ts";
 import { emitNotification } from "@/lib/notification/dispatcher.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
 
@@ -24,6 +25,12 @@ const fmtMin = (m: number) => {
   const min = m % 60;
   return h > 0 ? `${h}h ${min}m` : `${min}m`;
 };
+
+/** Strip chain-of-thought — keep only the actual standup starting from **📝 */
+function extractStandup(raw: string): string {
+  const match = raw.match(/(\*\*📝.+)$/s);
+  return match ? match[1].trim() : raw.trim();
+}
 
 function buildPrompt(ctx: StandupContext): ChatMessage[] {
   // Trim data to what AI needs (avoid bloated prompts)
@@ -52,9 +59,11 @@ function buildPrompt(ctx: StandupContext): ChatMessage[] {
     },
   };
 
-  const system = `คุณเป็นเลขาส่วนตัวที่ช่วยพนักงานเขียน daily standup ให้กระชับ ชัดเจน เป็นภาษาไทย
+  const system = `คุณคือเลขาที่เขียน daily standup — ผู้ใช้เห็นทุกคำที่คุณพิมพ์
 
-โครงสร้าง 4 ส่วน — ใช้ heading ตามนี้แน่นอน:
+⚠️ กฎข้อ 0: ห้ามคิดในใจ ห้ามใช้ "ผู้ใช้ถาม" "ฉันจะ" "มาดูกัน" "ก่อนอื่น" "ดูข้อมูล" — ตอบผลลัพธ์ตรง ๆ
+
+โครงสร้าง:
 **📝 เมื่อวาน**
 - bullet ของงานที่ปิด พร้อมจำนวนชั่วโมง ถ้ามี
 - รวมเวลาทำงานทั้งวัน
@@ -73,8 +82,7 @@ function buildPrompt(ctx: StandupContext): ChatMessage[] {
 ข้อกำหนด:
 - ภาษาไทยเท่านั้น
 - ใช้ข้อมูลจริง อย่าเดา
-- ถ้าข้อมูลว่าง (เช่น เมื่อวานไม่มีงานปิด) ให้พูดตรง ๆ ว่า "เมื่อวานไม่ได้ปิดงาน"
-- ถ้าวันนี้ลา ให้บอกชัดเจน
+- ถ้าข้อมูลว่าง ให้พูดตรง ๆ เช่น "เมื่อวานไม่ได้ปิดงาน"
 - ความยาวรวมไม่เกิน 200 คำ`;
 
   const user = `กรุณาเขียน daily standup ของฉัน
@@ -98,17 +106,37 @@ export const standupService = {
 
     let row = await standupRepository.findByEmployeeAndDate(employeeId, today);
     if (!row) {
-      row = await this.generateForEmployee(employeeId);
+      // Delay background generation so it runs after response is sent
+      setTimeout(() => {
+        this.generateForEmployee(employeeId).catch((err) =>
+          logger.error({ err, employeeId }, "background standup generation failed"),
+        );
+      }, 1000);
+      // Return placeholder immediately
+      row = await standupRepository.upsert({
+        employeeId, date: today,
+        draftText: "⏳ กำลังสร้างสรุปประจำวัน... ลอง刷新ใน 30 วิ",
+        model: "pending",
+      });
     }
     return { ...row, context: ctx };
+  },
+
+  async getPlaceholder(employeeId: string): Promise<StandupRow> {
+    const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" })).toISOString().slice(0, 10);
+    return await standupRepository.upsert({
+      employeeId, date: today,
+      draftText: "⏳ กำลังสร้างสรุปประจำวัน... ลอง刷新ใน 30 วิ",
+      model: "pending",
+    });
   },
 
   async generateForEmployee(employeeId: string): Promise<StandupRow> {
     const ctx = await standupRepository.buildContext(employeeId);
     const messages = buildPrompt(ctx);
-    const ai = await chatComplete({ messages, temperature: 0.4, maxTokens: 800 });
+    const ai = await chatComplete({ messages, temperature: 0.4, maxTokens: 3000 });
 
-    const text = ai.text.trim() || "ไม่สามารถสร้างได้ ลองใหม่อีกครั้ง";
+    const text = extractStandup(ai.text) || "ไม่สามารถสร้างได้ ลองใหม่อีกครั้ง";
     return await standupRepository.upsert({
       employeeId,
       date:      ctx.today.date,

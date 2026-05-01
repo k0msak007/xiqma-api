@@ -446,14 +446,14 @@ export const lineAiService = {
 ชื่อผู้ใช้: ${user.name} (${user.role === "admin" ? "admin — ดูได้ทั้งหมด" : user.role === "manager" ? "หัวหน้า — ดูของตัวเอง+ทีมได้" : "พนักงาน — ดูของตัวเองเท่านั้น"})
 
 กฎสำคัญ (ห้ามละเมิด):
-1. ห้ามพูดคิดในใจ ห้ามอธิบายขั้นตอน — user เห็นทุกคำที่คุณตอบ
-2. ห้ามใช้คำว่า "ผู้ใช้ถาม" "ฉันจะ" "มาดูกัน" "ก่อนอื่น" "สรุปคือ" — ตอบเนื้อหาเลย
-3. ตอบสั้น ตรงประเด็น — 1-3 ประโยคพอ
-4. ภาษาไทย เป็นกันเอง ใช้ emoji ได้นิดหน่อย
-5. เรียก tool ทันที — ไม่ต้องถามย้ำ
+0. ห้ามพูดคิดในใจเด็ดขาด — user เห็นทุกคำที่พิมพ์ ห้ามใช้ "ผู้ใช้ถาม" "ฉันจะ" "ดูข้อมูล" "ก่อนอื่น" — ตอบผลลัพธ์ตรงๆ
+1. ตอบสั้น ตรงประเด็น — 1-3 ประโยคพอ
+2. ภาษาไทย เป็นกันเอง ใช้ emoji ได้นิดหน่อย
+3. เรียก tool ทันที — ไม่ต้องถามย้ำ
 6. ${user.role === "admin" ? "คุณคือ admin — ดูข้อมูลทุกคนได้" : user.role === "manager" ? "คุณคือหัวหน้า — ดูของตัวเอง+ทีมได้ ใช้ employee_name" : "คุณคือพนักงาน — ดูของตัวเองเท่านั้น"}
 7. จับเวลา/ปิดงาน: ทำได้เฉพาะงานของตัวเองเสมอ
 8. ถ้าถามนอกขอบเขต → "คุณไม่มีสิทธิ์ดูข้อมูลนี้ค่ะ"
+9. 💡 ถ้าคำถามต้องการข้อมูลหลายอย่าง → เรียกทุก tool ที่จำเป็นพร้อมกันได้เลย
 ${isFirstToday ? `\n⚠️ ข้อความแรกของวัน — ทักทายตอนเช้า + สรุปงานวันนี้สั้นๆ ก่อนตอบ` : ""}`;
 
     const messages: ChatMessage[] = [
@@ -463,117 +463,117 @@ ${isFirstToday ? `\n⚠️ ข้อความแรกของวัน — 
     ];
 
     try {
+      const MAX_ROUNDS = parseInt(process.env.AI_QA_MAX_ROUNDS ?? "3", 10);
+
       // First attempt — with tools (model might support function calling)
-      let result1 = await chatComplete({
+      let result = await chatComplete({
         messages,
         model: LINE_MODEL,
         temperature: 0.3,
         maxTokens: 800,
         tools: TOOLS,
       }).catch(async (err) => {
-        // Model doesn't support tools → retry without
         if (err?.message?.includes("400") || err?.message?.includes("tool")) {
           return await chatComplete({ messages, model: LINE_MODEL, temperature: 0.3, maxTokens: 800 });
         }
         throw err;
       });
 
-      let finalText = result1.text || "";
+      let finalText = result.text || "";
+      const allToolNames: string[] = [];
 
-      if (result1.toolCalls?.length) {
-        const toolNames: string[] = [];
-        let toolResponse = "";
-        for (const tc of result1.toolCalls) {
-          const executor = TOOL_EXECUTORS[tc.function.name];
-          if (executor) {
+      // Multi-round tool loop
+      for (let round = 1; round <= MAX_ROUNDS && result.toolCalls?.length; round++) {
+        // Execute all tool calls in parallel
+        const toolResults = await Promise.all(
+          result.toolCalls!.map(async (tc) => {
+            const executor = TOOL_EXECUTORS[tc.function.name];
+            if (!executor) return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: `unknown: ${tc.function.name}` }) };
+            allToolNames.push(tc.function.name);
             try {
               const args = JSON.parse(tc.function.arguments || "{}");
-              const result = await executor(args, user);
-              toolNames.push(tc.function.name);
-              toolResponse = result;
+              return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content: await executor(args, user) };
             } catch (err) {
               logger.error({ err, tool: tc.function.name }, "line tool failed");
+              return { role: "tool" as const, tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify({ error: (err as any)?.message }) };
+            }
+          })
+        );
+
+        // Append to conversation
+        messages.push({ role: "assistant", content: result.text || "", tool_calls: result.toolCalls! });
+        messages.push(...toolResults);
+
+        // Call LLM again — might return more tool calls or final answer
+        result = await chatComplete({
+          messages,
+          model: LINE_MODEL,
+          temperature: 0.3,
+          maxTokens: 500,
+          ...(round < MAX_ROUNDS ? { tools: TOOLS } : {}), // last round: force text, no more tools
+        });
+
+        finalText = result.text || finalText;
+      }
+
+      // Process Flex responses based on last tool calls
+      const lastTools = allToolNames;
+      const mainTool = lastTools[0];
+
+      // Carousel for start_timer
+      if (mainTool === "start_timer" && lastTools.length === 1) {
+        try {
+          // Check last tool result for carousel flag
+          const lastMsg = messages[messages.length - 1]?.content;
+          const data = lastMsg ? JSON.parse(String(lastMsg)) : null;
+          if (data?.carousel && data.tasks?.length > 0) {
+            await pushFlex(lineUserId, {
+              altText: `เลือกงาน (${data.tasks.length})`,
+              contents: { type: "carousel", contents: data.tasks.map((t: any) => buildTaskCarouselBubble({ task: t })) },
+            });
+            await saveMessage(lineUserId, user.employeeId, "assistant", "แสดง carousel", lastTools);
+            return;
+          }
+        } catch {}
+      }
+
+      // Flex for task list
+      if (mainTool === "get_my_tasks") {
+        try {
+          // Find the tool result in messages
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role !== "tool" || messages[i].name !== "get_my_tasks") continue;
+            const data = JSON.parse(messages[i].content);
+            if (data.tasks?.length > 0) {
+              await pushFlex(lineUserId, {
+                altText: finalText.slice(0, 300),
+                contents: buildTaskListFlex({ headerText: `📋 งานของ${user.name} (${data.count})`, tasks: data.tasks }),
+              });
+              await saveMessage(lineUserId, user.employeeId, "assistant", finalText, lastTools);
+              return;
             }
           }
-        }
-
-        // Send tool result back to LLM for a nice message
-        if (toolResponse) {
-          const result2 = await chatComplete({
-            messages: [
-              ...messages,
-              { role: "assistant", content: "", tool_calls: result1.toolCalls },
-              { role: "tool", content: toolResponse, tool_call_id: result1.toolCalls[0]?.id ?? "", name: result1.toolCalls[0]?.function.name ?? "" },
-            ],
-            model: LINE_MODEL,
-            temperature: 0.3,
-            maxTokens: 500,
-          });
-
-          finalText = result2.text || finalText;
-
-          const mainTool = result1.toolCalls[0]?.function.name;
-
-          // Send carousel if multiple tasks to pick from
-          if (mainTool === "start_timer" && toolResponse) {
-            try {
-              const data = JSON.parse(toolResponse);
-              if (data.carousel && data.tasks?.length > 0) {
-                await pushFlex(lineUserId, {
-                  altText: `เลือกงาน (${data.tasks.length})`,
-                  contents: {
-                    type: "carousel",
-                    contents: data.tasks.map((t: any) => buildTaskCarouselBubble({ task: t })),
-                  },
-                });
-                await saveMessage(lineUserId, user.employeeId, "assistant", "แสดง carousel เลือกงาน", toolNames);
-                return;
-              }
-            } catch {}
-          }
-
-          // Send Flex if task list
-          if (mainTool === "get_my_tasks" && toolResponse) {
-            try {
-              const data = JSON.parse(toolResponse);
-              if (data.tasks?.length > 0) {
-                const headerText = `📋 งานของ${user.name} (${data.count})`;
-                await pushFlex(lineUserId, {
-                  altText: finalText.slice(0, 300),
-                  contents: buildTaskListFlex({ headerText, tasks: data.tasks }),
-                });
-                await saveMessage(lineUserId, user.employeeId, "assistant", finalText, toolNames);
-                return;
-              }
-            } catch {}
-          }
-
-          // Send confirm bubble for done/timer actions
-          const confirmActions: Record<string, any> = {
-            mark_done:    { emoji: "✅", msg: "งานเสร็จแล้ว — ดีมาก!" },
-            start_timer:  { emoji: "▶️", msg: "เริ่มจับเวลาแล้ว" },
-            stop_timer:   { emoji: "⏸️", msg: "หยุดจับเวลาแล้ว" },
-          };
-          if (mainTool && confirmActions[mainTool]) {
-            try {
-              const data = JSON.parse(toolResponse);
-              if (data.success) {
-                const conf = confirmActions[mainTool];
-                await pushFlex(lineUserId, {
-                  altText: finalText.slice(0, 300),
-                  contents: buildConfirmBubble({ emoji: conf.emoji, message: finalText }),
-                });
-                await saveMessage(lineUserId, user.employeeId, "assistant", finalText, toolNames);
-                return;
-              }
-            } catch {}
-          }
-
-          await saveMessage(lineUserId, user.employeeId, "assistant", finalText, toolNames);
-        }
-      } else {
-        await saveMessage(lineUserId, user.employeeId, "assistant", finalText);
+        } catch {}
       }
+
+      // Confirm bubble for done/start/stop
+      const confirmActions: Record<string, string> = { mark_done: "✅", start_timer: "▶️", stop_timer: "⏸️" };
+      if (mainTool && confirmActions[mainTool]) {
+        try {
+          const lastMsg = messages[messages.length - 1]?.content;
+          const data = lastMsg ? JSON.parse(String(lastMsg)) : null;
+          if (data?.success) {
+            await pushFlex(lineUserId, {
+              altText: finalText.slice(0, 300),
+              contents: buildConfirmBubble({ emoji: confirmActions[mainTool], message: finalText }),
+            });
+            await saveMessage(lineUserId, user.employeeId, "assistant", finalText, lastTools);
+            return;
+          }
+        } catch {}
+      }
+
+      await saveMessage(lineUserId, user.employeeId, "assistant", finalText, lastTools);
 
       await replyTextWithQuickReplies(replyToken, finalText.slice(0, 4800), [
         { label: "📋 งานวันนี้", text: "งานวันนี้" },

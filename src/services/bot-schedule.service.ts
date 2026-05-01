@@ -564,14 +564,16 @@ export const botScheduleService = {
 
     const bkk    = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
     const curHour = bkk.getHours();
+    const curMin  = bkk.getMinutes();
     const isoDow  = bkk.getDay() === 0 ? 7 : bkk.getDay();
     const dom     = bkk.getDate();
     const dateIso = bkk.toISOString().slice(0, 10);
 
     let ran = 0;
     for (const s of all) {
-      const sendHour = Number(s.sendTime.split(":")[0] ?? "8");
-      if (sendHour !== curHour) continue;
+      const [sendH, sendM] = (s.sendTime ?? "08:00").split(":").map(Number);
+      if (sendH !== curHour) continue;
+      if (sendM !== curMin) continue;
       if (!s.sendDays.includes(isoDow)) continue;
       if (s.sendDayOfMonth != null && s.sendDayOfMonth !== dom) continue;
 

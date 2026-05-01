@@ -43,11 +43,13 @@ export const standupsRouter = new Hono()
     return ok(c, data, "ดึง standup ของทีมสำเร็จ");
   })
 
-  // POST /standups/regenerate — force regenerate my today's standup
+  // POST /standups/regenerate — force regenerate my today's standup (non-blocking)
   .post("/regenerate", async (c) => {
     const user = c.get("user");
-    const updated = await standupService.generateForEmployee(user.userId);
-    return ok(c, updated, "สร้าง standup ใหม่สำเร็จ");
+    // Fire background regeneration → return placeholder immediately
+    standupService.generateForEmployee(user.userId).catch(() => {});
+    const placeholder = await standupService.getPlaceholder(user.userId);
+    return ok(c, placeholder, "กำลังสร้าง standup ใหม่ — รอสักครู่");
   })
 
   // PATCH /standups/:id — edit my draft

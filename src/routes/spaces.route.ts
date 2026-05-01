@@ -51,10 +51,11 @@ export const spacesRouter = new Hono()
     return ok(c, space, "แก้ไข space สำเร็จ");
   })
 
-  // DELETE /spaces/:id  (admin only)
+  // DELETE /spaces/:id
   .delete("/:id", validate("param", idParamSchema), async (c) => {
     const { id } = c.req.valid("param");
-    await spaceService.delete(id);
+    const user = c.get("user");
+    await spaceService.delete(id, user.userId, user.role === "admin");
     return ok(c, null, "ลบ space สำเร็จ");
   })
 
@@ -62,13 +63,15 @@ export const spacesRouter = new Hono()
   .post("/:id/members", validate("param", idParamSchema), validate("json", addMembersSchema), async (c) => {
     const { id } = c.req.valid("param");
     const data = c.req.valid("json");
-    await spaceService.addMembers(id, data);
+    const user = c.get("user");
+    await spaceService.addMembers(id, data, user.userId, user.role === "admin");
     return ok(c, null, "เพิ่มสมาชิกสำเร็จ");
   })
 
   // DELETE /spaces/:id/members/:employeeId
   .delete("/:id/members/:employeeId", validate("param", memberParamSchema), async (c) => {
     const { id, employeeId } = c.req.valid("param");
-    await spaceService.removeMember(id, employeeId);
+    const user = c.get("user");
+    await spaceService.removeMember(id, employeeId, user.userId, user.role === "admin");
     return ok(c, null, "ลบสมาชิกออกสำเร็จ");
   });
