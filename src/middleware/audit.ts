@@ -59,21 +59,26 @@ export const auditMiddleware = createMiddleware(async (c, next) => {
   const shouldLog =
     MUTATING.has(method) && !SKIP_PREFIXES.some((p) => path.startsWith(p));
 
-  // Capture body BEFORE next() — the handler will consume the stream
+  // Capture body BEFORE next() — the handler will consume the stream.
+  // Skip multipart/file uploads — binary data can't be stored in JSONB.
   let body: unknown = null;
   if (shouldLog) {
-    try {
-      const clone = c.req.raw.clone();
-      const text = await clone.text();
-      if (text) {
-        try {
-          body = JSON.parse(text);
-        } catch {
-          body = { raw: text.slice(0, 500) };
+    const contentType = c.req.header("content-type") ?? "";
+    const isMultipart = contentType.startsWith("multipart/form-data");
+    if (!isMultipart) {
+      try {
+        const clone = c.req.raw.clone();
+        const text = await clone.text();
+        if (text) {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            body = { raw: text.slice(0, 500) };
+          }
         }
+      } catch {
+        /* ignore — body not readable */
       }
-    } catch {
-      /* ignore — e.g. multipart/form-data */
     }
   }
 

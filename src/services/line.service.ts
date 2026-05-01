@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db.ts";
 import { pushText, replyText } from "@/lib/line.ts";
+import { lineAiService } from "@/services/line-ai.service.ts";
 import { logger } from "@/lib/logger.ts";
 import { AppError, ErrorCode } from "@/lib/errors.ts";
 
@@ -125,11 +126,10 @@ export const lineService = {
       const text = String(event.message.text ?? "").trim();
       const match = text.match(/^\d{6}$/);
       if (!match) {
+        // Route to AI assistant
         if (replyToken) {
-          await replyText(
-            replyToken,
-            "❓ กรุณาส่งรหัส 6 หลักจากหน้า Settings → Notifications เพื่อผูกบัญชี",
-          ).catch(() => {});
+          lineAiService.processMessage(lineUserId, text, replyToken)
+            .catch((err) => logger.error({ err }, "line.ai message failed"));
         }
         return;
       }
@@ -178,6 +178,16 @@ export const lineService = {
           replyToken,
           `✅ ผูกบัญชีสำเร็จ!\nสวัสดีคุณ ${empName} — จากนี้คุณจะได้รับการแจ้งเตือนของ Xiqma ทาง LINE 🎉`,
         ).catch(() => {});
+      }
+      return;
+    }
+
+    // Postback — inline button clicks (✅ Done, ▶️ Start, etc.)
+    if (event.type === "postback") {
+      const data = event?.postback?.data as string | undefined;
+      if (data && replyToken) {
+        lineAiService.processPostback(lineUserId, data, replyToken)
+          .catch((err) => logger.error({ err }, "line.ai postback failed"));
       }
       return;
     }

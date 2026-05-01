@@ -244,6 +244,25 @@ export function startNotificationCron(): void {
     runRecurringTasksJob().catch((err) => logger.error({ err }, "cron.recurring_tasks failed"));
   }, { timezone: "Asia/Bangkok" });
 
+  // ทุก 30 นาที — ล้าง LINE conversation history เก่า (keep last 30 per user)
+  cron.schedule("*/30 * * * *", async () => {
+    try {
+      const result = await db.execute<Record<string, unknown>>(sql.raw(`
+        DELETE FROM line_messages
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY line_user_id ORDER BY created_at DESC) AS rn
+            FROM line_messages
+          ) sub WHERE rn <= 30
+        )
+      `));
+      const deleted = ((result as any).rowCount ?? 0);
+      if (deleted > 0) logger.info({ deleted }, "cron.line_messages cleanup");
+    } catch (err) {
+      logger.error({ err }, "cron.line_messages cleanup failed");
+    }
+  });
+
   // Run once on startup (for testing convenience)
   if (process.env.NODE_ENV === "development") {
     setTimeout(() => {
