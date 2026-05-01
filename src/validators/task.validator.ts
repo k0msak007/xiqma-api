@@ -36,7 +36,13 @@ export const createTaskSchema = z.object({
   deadline:          z.string().datetime({ offset: true }).optional(),
   description:       z.string().optional(),
   tags:              z.array(z.string()).optional().default([]),
-  source:            z.string().optional().default("manager_assigned"),
+  customFields:      z.record(z.string(), z.string()).optional(),
+}).refine((d) => !d.planStart || !d.planFinish || new Date(d.planStart) <= new Date(d.planFinish), {
+  message: "planStart ต้องไม่มาหลัง planFinish",
+  path: ["planFinish"],
+}).refine((d) => !d.deadline || !d.planFinish || new Date(d.deadline) >= new Date(d.planFinish), {
+  message: "deadline ต้องไม่มาก่อน planFinish",
+  path: ["deadline"],
 });
 
 export const updateTaskSchema = z.object({
@@ -59,6 +65,7 @@ export const updateTaskSchema = z.object({
   blockedNote:       z.string().optional().nullable(),
   startedAt:         z.string().datetime({ offset: true }).optional().nullable(),
   completedAt:       z.string().datetime({ offset: true }).optional().nullable(),
+  customFields:      z.record(z.string(), z.string()).optional(),
 });
 
 export const updateTaskStatusSchema = z.object({

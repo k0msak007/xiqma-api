@@ -174,6 +174,7 @@ export const taskRepository = {
         t.started_at, t.completed_at, t.status, t.display_order,
         t.score, t.estimate_progress, t.blocked_note, t.blocked_at, t.tags,
         t.created_at, t.updated_at,
+        t.custom_fields AS "customFields",
         ls.id AS status_id, ls.name AS status_name, ls.color AS status_color, ls.type AS status_type,
         a.id AS assignee_id_ref, a.name AS assignee_name, a.avatar_url AS assignee_avatar,
         a.employee_code AS assignee_code,
@@ -227,6 +228,10 @@ export const taskRepository = {
     if (data.planFinish)        { cols.push("plan_finish");          vals.push(`'${data.planFinish}'`); }
     if (data.durationDays != null) { cols.push("duration_days");    vals.push(`${data.durationDays}`); }
     if (data.deadline)          { cols.push("deadline");             vals.push(`'${data.deadline}'::timestamptz`); }
+    if (data.customFields && Object.keys(data.customFields).length > 0) {
+      cols.push("custom_fields");
+      vals.push(`'${JSON.stringify(data.customFields).replace(/'/g, "''")}'::jsonb`);
+    }
 
     // Get current max display_order for this list
     const maxOrderRows = await db.execute<{ max_order: string }>(sql.raw(`
@@ -273,6 +278,11 @@ export const taskRepository = {
     if (data.startedAt !== undefined)         sets.push(data.startedAt ? `started_at = '${data.startedAt}'::timestamptz` : "started_at = NULL");
     if (data.completedAt !== undefined)       sets.push(data.completedAt ? `completed_at = '${data.completedAt}'::timestamptz` : "completed_at = NULL");
     if (data.accumulatedMinutes !== undefined) sets.push(`accumulated_minutes = accumulated_minutes + ${data.accumulatedMinutes}`);
+    if (data.customFields !== undefined) {
+      sets.push(data.customFields && Object.keys(data.customFields).length > 0
+        ? `custom_fields = '${JSON.stringify(data.customFields).replace(/'/g, "''")}'::jsonb`
+        : "custom_fields = '{}'::jsonb");
+    }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       UPDATE tasks SET ${sets.join(", ")}
