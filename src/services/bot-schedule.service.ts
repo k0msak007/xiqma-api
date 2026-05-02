@@ -557,9 +557,12 @@ export const botScheduleService = {
   },
 
   /**
-   * Cron tick: every hour. For each FIXED schedule, decide if it should run now.
+   * Cron tick: every minute. For each FIXED schedule, decide if it should run now.
    */
   async tickFixed(): Promise<{ ran: number; total: number }> {
+    if ((this as any)._tickFixedRunning) return { ran: 0, total: 0 };
+    (this as any)._tickFixedRunning = true;
+    try {
     const all = await botScheduleRepository.listByType("fixed");
 
     const bkk    = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
@@ -590,6 +593,7 @@ export const botScheduleService = {
       }
     }
     return { ran, total: all.length };
+    } finally { (this as any)._tickFixedRunning = false; }
   },
 
   /**
@@ -597,6 +601,9 @@ export const botScheduleService = {
    * Lightweight — 99% of ticks return immediately after condition checks.
    */
   async tickInterval(): Promise<{ ran: number; total: number }> {
+    if ((this as any)._tickIntervalRunning) return { ran: 0, total: 0 };
+    (this as any)._tickIntervalRunning = true;
+    try {
     const all = await botScheduleRepository.listByType("interval");
     if (all.length === 0) return { ran: 0, total: 0 };
 
@@ -616,8 +623,8 @@ export const botScheduleService = {
         const nowMinutes = curHour * 60 + curMin;
         const [sh, sm] = (s.sendWindowStart ?? "09:00").split(":").map(Number);
         const [eh, em] = (s.sendWindowEnd ?? "18:00").split(":").map(Number);
-        const startMin = sh * 60 + (sm ?? 0);
-        const endMin   = eh * 60 + (em ?? 0);
+        const startMin = (sh ?? 0) * 60 + (sm ?? 0);
+        const endMin   = (eh ?? 0) * 60 + (em ?? 0);
         if (nowMinutes < startMin || nowMinutes >= endMin) continue;
 
         // Interval check: is this minute aligned with the schedule?
@@ -640,5 +647,6 @@ export const botScheduleService = {
       }
     }
     return { ran, total: all.length };
+    } finally { (this as any)._tickIntervalRunning = false; }
   },
 };

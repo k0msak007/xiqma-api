@@ -150,32 +150,31 @@ export function startNotificationCron(): void {
   if (started) return;
   started = true;
 
-  // ทุกต้นชั่วโมง (00 นาที) — due reminder + overdue
-  cron.schedule("0 * * * *", () => {
+  // ทุกต้นชั่วโมง (00 นาที, 0 วินาที) — due reminder + overdue
+  cron.schedule("0 0 * * * *", () => {
     runDueSoonJob().catch((err) => logger.error({ err }, "cron.due_reminder failed"));
     runOverdueJob().catch((err) => logger.error({ err }, "cron.overdue failed"));
   });
 
-  // ทุกต้นชั่วโมง — เช็ค standup settings แล้วตัดสินใจรันหรือไม่
-  // (admin เปลี่ยน "เวลาส่ง" → มีผลในชั่วโมงถัดไป โดยไม่ต้อง re-deploy)
-  cron.schedule("0 * * * *", () => {
+  // ทุกต้นชั่วโมง (00 นาที, 10 วินาที) — เช็ค standup settings
+  cron.schedule("10 0 * * * *", () => {
     runStandupTick().catch((err) => logger.error({ err }, "cron.daily_standup tick failed"));
   }, { timezone: "Asia/Bangkok" });
 
-  // ทุกนาที — เช็ค bot schedules แบบ fixed (lightweight: most minutes skip immediately)
-  cron.schedule("* * * * *", () => {
+  // ทุก 2 นาที (20 วินาที) — เช็ค bot schedules แบบ fixed (เบาพอสำหรับ production)
+  cron.schedule("20 */2 * * * *", () => {
     botScheduleService.tickFixed()
       .catch((err) => logger.error({ err }, "cron.bot_schedules.tickFixed failed"));
   }, { timezone: "Asia/Bangkok" });
 
-  // ทุกนาที — เช็ค bot schedules แบบ interval (within time window)
-  cron.schedule("* * * * *", () => {
+  // ทุก 2 นาที (30 วินาที) — เช็ค bot schedules แบบ interval
+  cron.schedule("30 */2 * * * *", () => {
     botScheduleService.tickInterval()
       .catch((err) => logger.error({ err }, "cron.bot_schedules.tickInterval failed"));
   }, { timezone: "Asia/Bangkok" });
 
   // ── Recurring task generation ───────────────────────────────────────────
-  // Daily at midnight Bangkok — create copies of recurring tasks due today.
+  // Daily at midnight Bangkok (40 วินาที)
   async function runRecurringTasksJob(): Promise<void> {
     const now = new Date(new Date().toLocaleString("en-US", { timezone: "Asia/Bangkok" }));
     const today = now.toISOString().slice(0, 10);
@@ -239,12 +238,12 @@ export function startNotificationCron(): void {
     if (created > 0) logger.info({ created }, "cron.recurring_tasks completed");
   }
 
-  cron.schedule("0 0 * * *", () => {
+  cron.schedule("40 0 0 * * *", () => {
     runRecurringTasksJob().catch((err) => logger.error({ err }, "cron.recurring_tasks failed"));
   }, { timezone: "Asia/Bangkok" });
 
-  // ทุก 30 นาที — ล้าง LINE conversation history เก่า (keep last 30 per user)
-  cron.schedule("*/30 * * * *", async () => {
+  // ทุก 30 นาที (50 วินาที) — ล้าง LINE conversation history
+  cron.schedule("50 */30 * * * *", async () => {
     try {
       const result = await db.execute<Record<string, unknown>>(sql.raw(`
         DELETE FROM line_messages
@@ -260,6 +259,16 @@ export function startNotificationCron(): void {
     } catch (err) {
       logger.error({ err }, "cron.line_messages cleanup failed");
     }
+  });
+
+  // ทุกวันตี 3 — ล้าง audit_logs เก่า (> 90 วัน)
+  cron.schedule("0 3 * * *", () => {
+    db.execute(sql.raw(`DELETE FROM audit_logs WHERE created_at < NOW() - INTERVAL '90 days'`))
+      .then((r: any) => {
+        const deleted = (r as any).rowCount ?? 0;
+        if (deleted > 0) logger.info({ deleted }, "cron.audit_logs cleanup");
+      })
+      .catch((err) => logger.error({ err }, "cron.audit_logs cleanup failed"));
   });
 
   // Run once on startup (for testing convenience)
