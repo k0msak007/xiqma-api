@@ -97,11 +97,11 @@ export const spaceRepository = {
   },
 
   async delete(id: string) {
-    // Cascade: tasks (soft) → list_statuses → lists → folders → space_members → space
+    // Cascade: tasks (soft+clear status) → list_statuses → lists → folders → members → space
+    // Hard delete soft-deleted tasks in this space's lists
     await db.execute(sql`
-      UPDATE tasks SET deleted_at = now()
-      WHERE list_id IN (SELECT id FROM lists WHERE space_id = ${id}::uuid)
-        AND deleted_at IS NULL
+      DELETE FROM tasks WHERE list_id IN (SELECT id FROM lists WHERE space_id = ${id}::uuid)
+        AND deleted_at IS NOT NULL
     `);
     await db.execute(sql`
       DELETE FROM list_statuses

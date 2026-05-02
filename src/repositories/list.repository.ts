@@ -116,11 +116,9 @@ export const listRepository = {
   },
 
   async delete(id: string) {
-    // Soft-delete tasks inside
-    await db.execute(sql`
-      UPDATE tasks SET deleted_at = now() WHERE list_id = ${id}::uuid AND deleted_at IS NULL
-    `);
-    // Delete statuses then list (cascade should handle, but be explicit)
+    // Hard delete soft-deleted tasks (active tasks blocked by service check)
+    await db.execute(sql`DELETE FROM tasks WHERE list_id = ${id}::uuid AND deleted_at IS NOT NULL`);
+    // FK ON DELETE SET NULL handles list_status_id + list_id on remaining tasks
     await db.delete(listStatuses).where(eq(listStatuses.listId, id));
     await db.delete(lists).where(eq(lists.id, id));
   },
@@ -131,6 +129,14 @@ export const listRepository = {
       WHERE list_id = ${id}::uuid AND deleted_at IS NULL
     `);
     return Number(result[0]?.cnt ?? 0) > 0;
+  },
+
+  async countActiveTasks(id: string): Promise<number> {
+    const result = await db.execute<{ cnt: string }>(sql`
+      SELECT COUNT(*) AS cnt FROM tasks
+      WHERE list_id = ${id}::uuid AND deleted_at IS NULL
+    `);
+    return Number(result[0]?.cnt ?? 0);
   },
 
   // ── Statuses ──

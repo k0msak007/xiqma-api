@@ -88,11 +88,15 @@ export const folderRepository = {
   },
 
   async delete(id: string) {
-    // Cascade: soft-delete tasks → delete list_statuses → delete lists → delete folder
+    // Hard delete soft-deleted tasks in this folder's lists
     await db.execute(sql`
-      UPDATE tasks SET deleted_at = now()
+      DELETE FROM tasks WHERE list_id IN (SELECT id FROM lists WHERE folder_id = ${id}::uuid)
+        AND deleted_at IS NOT NULL
+    `);
+    // FK ON DELETE SET NULL handles remaining references
+    await db.execute(sql`
+      DELETE FROM list_statuses
       WHERE list_id IN (SELECT id FROM lists WHERE folder_id = ${id}::uuid)
-        AND deleted_at IS NULL
     `);
     await db.execute(sql`
       DELETE FROM list_statuses

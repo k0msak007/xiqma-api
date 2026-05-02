@@ -52,6 +52,11 @@ export const listService = {
       const isMember = await spaceRepository.isMember(list.spaceId, userId);
       if (!isMember) throw new AppError(ErrorCode.FORBIDDEN, "คุณไม่ได้เป็นสมาชิกของ space นี้", 403);
     }
+    // Check for active tasks
+    const activeCount = await listRepository.countActiveTasks(id);
+    if (activeCount > 0) {
+      throw new AppError(ErrorCode.LIST_HAS_TASKS, `ยังมี ${activeCount} task ใน list นี้ — กรุณาย้าย task ทั้งหมดออกก่อนลบ`, 409);
+    }
     await listRepository.delete(id);
   },
 
