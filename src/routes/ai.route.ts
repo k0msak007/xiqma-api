@@ -8,11 +8,11 @@ import { durationEstimator } from "@/services/duration-estimator.service.ts";
 import { aiQaService } from "@/services/ai-qa.service.ts";
 import { logger } from "@/lib/logger.ts";
 
-// All AI features are admin-only (cost + privacy considerations).
-const requireAdmin = (c: any) => {
+// AI features are admin+manager (cost + privacy considerations).
+const requireAdminOrManager = (c: any) => {
   const user = c.get("user");
-  if (user.role !== "admin") {
-    return c.json({ success: false, message: "ฟีเจอร์ AI สำหรับ admin เท่านั้น", error: "FORBIDDEN" }, 403);
+  if (user.role !== "admin" && user.role !== "manager") {
+    return c.json({ success: false, message: "ฟีเจอร์ AI สำหรับ admin และ manager เท่านั้น", error: "FORBIDDEN" }, 403);
   }
   return null;
 };
@@ -33,7 +33,7 @@ ai.post(
   "/tasks/extract",
   validate("json", extractTasksBodySchema),
   async (c) => {
-    const forbidden = requireAdmin(c);
+    const forbidden = requireAdminOrManager(c);
     if (forbidden) return forbidden;
     const body = c.req.valid("json" as never) as {
       text: string; listId: string; language: "th" | "en";
@@ -52,7 +52,7 @@ ai.post(
   "/estimate-duration",
   validate("json", estimateDurationSchema),
   async (c) => {
-    const forbidden = requireAdmin(c);
+    const forbidden = requireAdminOrManager(c);
     if (forbidden) return forbidden;
     const body = c.req.valid("json" as never) as {
       title: string; description?: string | null;

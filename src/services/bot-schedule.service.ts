@@ -250,10 +250,10 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
   } else if (kind === "leave_reminder") {
     // ── Leave today (company-wide) ──
     const todayRows = await db.execute<Record<string, unknown>>(sql.raw(`
-      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      SELECT e.name, lr.leave_type AS type, lr.start_date::text, lr.end_date::text
       FROM leave_requests lr
       JOIN employees e ON lr.employee_id = e.id
-      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+      WHERE lr.status = 'approved'
         AND lr.start_date <= (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
         AND lr.end_date >= (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
       ORDER BY lr.start_date
@@ -264,10 +264,10 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
 
     // ── Leave tomorrow (company-wide) ──
     const tomorrowRows = await db.execute<Record<string, unknown>>(sql.raw(`
-      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      SELECT e.name, lr.leave_type AS type, lr.start_date::text, lr.end_date::text
       FROM leave_requests lr
       JOIN employees e ON lr.employee_id = e.id
-      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+      WHERE lr.status = 'approved'
         AND lr.start_date = ((CURRENT_DATE + INTERVAL '1 day') AT TIME ZONE 'Asia/Bangkok')::date
       ORDER BY lr.start_date
       LIMIT 20
@@ -277,10 +277,10 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
 
     // ── Leave in next 7 days (company-wide) ──
     const weekRows = await db.execute<Record<string, unknown>>(sql.raw(`
-      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      SELECT e.name, lr.leave_type AS type, lr.start_date::text, lr.end_date::text
       FROM leave_requests lr
       JOIN employees e ON lr.employee_id = e.id
-      WHERE lr.status = 'approved' AND lr.deleted_at IS NULL
+      WHERE lr.status = 'approved'
         AND lr.start_date > (CURRENT_DATE AT TIME ZONE 'Asia/Bangkok')
         AND lr.start_date <= ((CURRENT_DATE + INTERVAL '7 days') AT TIME ZONE 'Asia/Bangkok')::date
       ORDER BY lr.start_date
@@ -306,10 +306,10 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
 
     // ── Pending leaves (if this employee is a manager) ──
     const pendingRows = await db.execute<Record<string, unknown>>(sql.raw(`
-      SELECT e.name, lr.type, lr.start_date::text, lr.end_date::text
+      SELECT e.name, lr.leave_type AS type, lr.start_date::text, lr.end_date::text
       FROM leave_requests lr
       JOIN employees e ON lr.employee_id = e.id
-      WHERE lr.status = 'pending' AND lr.deleted_at IS NULL
+      WHERE lr.status = 'pending'
         AND e.manager_id = '${employeeId}'::uuid
       ORDER BY lr.start_date
       LIMIT 10
@@ -363,9 +363,9 @@ async function buildEmployeeContext(employeeId: string, kind: BotSchedule["conte
     const assignedRows = await db.execute<Record<string, unknown>>(sql.raw(`
       SELECT COALESCE(
         SUM(CASE
-          WHEN t.estimated_minutes IS NOT NULL AND t.estimated_minutes > 0 THEN t.estimated_minutes
-          ELSE 240
-        END) / 60.0, 0
+          WHEN t.time_estimate_hours IS NOT NULL AND t.time_estimate_hours > 0 THEN t.time_estimate_hours
+          ELSE 4
+        END), 0
       )::numeric(6,1) AS assigned
       FROM tasks t
       WHERE t.assignee_id = '${employeeId}'::uuid
