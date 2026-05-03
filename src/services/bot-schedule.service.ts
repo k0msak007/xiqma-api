@@ -482,6 +482,93 @@ ${contextLines.join("\n")}`,
   return ai.text.trim();
 }
 
+// ── Condition check — filter recipients based on schedule conditions ──────
+// ctx is available for individual conditions (0 extra DB queries).
+// Team conditions still query subordinates directly.
+
+async function checkCondition(s: BotSchedule, employeeId: string, ctx: ContextData): Promise<boolean> {
+  if (!s.conditionKind || s.conditionKind === "none") return true;
+
+  // ── Team-level conditions (check subordinates via DB) ────────────────────
+
+  if (s.conditionKind === "team_hours_below_target") {
+    const thresholdPct = (s.conditionParams?.threshold_pct ?? 80) / 100;
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      WITH subs AS (
+        SELECT e.id, e.name,
+          COALESCE(ws.hours_per_week * COALESCE(epc.expected_ratio, 0.8), 32) AS target_hours
+        FROM employees e
+        LEFT JOIN employee_performance_config epc ON epc.employee_id = e.id
+        LEFT JOIN work_schedules ws ON epc.work_schedule_id = ws.id
+        WHERE e.manager_id = '${employeeId}'::uuid AND e.is_active = true
+      ),
+      assigned AS (
+        SELECT t.assignee_id,
+          COALESCE(SUM(CASE WHEN t.time_estimate_hours > 0 THEN t.time_estimate_hours ELSE 4 END), 0)::numeric(6,1) AS assigned_hours
+        FROM tasks t
+        WHERE t.assignee_id IN (SELECT id FROM subs) AND t.deleted_at IS NULL AND t.completed_at IS NULL
+        GROUP BY t.assignee_id
+      )
+      SELECT s.id, s.target_hours, COALESCE(a.assigned_hours, 0) AS assigned_hours
+      FROM subs s
+      LEFT JOIN assigned a ON s.id = a.assignee_id
+      WHERE COALESCE(a.assigned_hours, 0) < s.target_hours * ${thresholdPct}
+      LIMIT 1
+    `));
+    return (((rows as any).rows ?? rows) as any[]).length > 0;
+  }
+
+  if (s.conditionKind === "team_has_overdue") {
+    const rows = await db.execute<Record<string, unknown>>(sql.raw(`
+      SELECT 1 FROM tasks t
+      WHERE t.assignee_id IN (
+        SELECT id FROM employees WHERE manager_id = '${employeeId}'::uuid AND is_active = true
+      )
+        AND t.deleted_at IS NULL AND t.completed_at IS NULL
+        AND t.deadline IS NOT NULL AND t.deadline < NOW()
+      LIMIT 1
+    `));
+    return (((rows as any).rows ?? rows) as any[]).length > 0;
+  }
+
+  // ── Individual conditions (use ctx data — 0 extra DB queries) ───────────
+
+  if (s.conditionKind === "hours_below_target") {
+    return parseFloat(ctx.hoursGap) > 0 || ctx.hoursGap !== "";
+  }
+
+  if (s.conditionKind === "hours_ok") {
+    return ctx.hoursOk !== "";
+  }
+
+  if (s.conditionKind === "has_overdue_tasks") {
+    return ctx.overdue > 0;
+  }
+
+  if (s.conditionKind === "has_due_today") {
+    return ctx.todayPlanned > 0;
+  }
+
+  if (s.conditionKind === "not_logged_today") {
+    return ctx.timeMissing !== "";
+  }
+
+  if (s.conditionKind === "logged_less_than") {
+    const threshold = s.conditionParams?.max_hours ?? 4;
+    return parseFloat(ctx.timeLogged) < threshold;
+  }
+
+  if (s.conditionKind === "has_leave_today") {
+    return ctx.leaveToday !== "";
+  }
+
+  if (s.conditionKind === "has_pending_leave") {
+    return ctx.pendingLeaves !== "";
+  }
+
+  return true;
+}
+
 export const botScheduleService = {
   list:    () => botScheduleRepository.list(),
   findById: (id: string) => botScheduleRepository.findById(id),
@@ -522,6 +609,12 @@ export const botScheduleService = {
         }
 
         const ctx = await buildEmployeeContext(employeeId, s.contextKind);
+
+        // Condition check — skip recipients that don't meet the condition
+        if (s.conditionKind && s.conditionKind !== "none") {
+          const shouldSend = await checkCondition(s, employeeId, ctx);
+          if (!shouldSend) continue;
+        }
         const title = renderTemplate(s.titleTemplate, ctx) || s.name;
         let body: string;
         if (s.mode === "ai") {
@@ -560,7 +653,10 @@ export const botScheduleService = {
    * Cron tick: every minute. For each FIXED schedule, decide if it should run now.
    */
   async tickFixed(): Promise<{ ran: number; total: number }> {
-    if ((this as any)._tickFixedRunning) return { ran: 0, total: 0 };
+    if ((this as any)._tickFixedRunning) {
+      logger.warn("bot_schedule.tickFixed skipped — previous tick still running");
+      return { ran: 0, total: 0 };
+    }
     (this as any)._tickFixedRunning = true;
     try {
     const all = await botScheduleRepository.listByType("fixed");
@@ -601,7 +697,10 @@ export const botScheduleService = {
    * Lightweight — 99% of ticks return immediately after condition checks.
    */
   async tickInterval(): Promise<{ ran: number; total: number }> {
-    if ((this as any)._tickIntervalRunning) return { ran: 0, total: 0 };
+    if ((this as any)._tickIntervalRunning) {
+      logger.warn("bot_schedule.tickInterval skipped — previous tick still running");
+      return { ran: 0, total: 0 };
+    }
     (this as any)._tickIntervalRunning = true;
     try {
     const all = await botScheduleRepository.listByType("interval");

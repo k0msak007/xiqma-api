@@ -17,7 +17,7 @@ const upsertBody = z.object({
   sendTime:         z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/),
   sendDays:         z.array(z.number().int().min(1).max(7)).min(1),
   sendDayOfMonth:   z.number().int().min(1).max(31).optional().nullable(),
-  audienceType:     z.enum(["all", "role", "employee"]),
+  audienceType:     z.enum(["all", "role", "employee", "managers_and_admins"]),
   audienceValues:   z.array(z.string()).optional(),
   respectWorkDays:  z.boolean().optional(),
   mode:             z.enum(["static", "ai"]),
@@ -31,6 +31,8 @@ const upsertBody = z.object({
   sendIntervalMinutes: z.number().int().min(0).max(1440).optional().nullable(),
   sendWindowStart:     z.string().max(5).optional().nullable(),
   sendWindowEnd:       z.string().max(5).optional().nullable(),
+  conditionKind:      z.enum(["none", "team_hours_below_target", "team_has_overdue", "hours_below_target", "hours_ok", "has_overdue_tasks", "has_due_today", "not_logged_today", "logged_less_than", "has_leave_today", "has_pending_leave"]).optional(),
+  conditionParams:    z.record(z.any()).optional(),
 });
 
 const requireAdmin = (c: any) => {

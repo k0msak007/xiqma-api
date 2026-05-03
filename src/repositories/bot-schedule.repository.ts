@@ -13,7 +13,7 @@ export interface BotSchedule {
   sendTime:          string;            // "HH:MM:SS"
   sendDays:          number[];
   sendDayOfMonth:    number | null;
-  audienceType:      "all" | "role" | "employee";
+  audienceType:      "all" | "role" | "employee" | "managers_and_admins";
   audienceValues:    string[];
   respectWorkDays:   boolean;
   mode:              "static" | "ai";
@@ -28,8 +28,10 @@ export interface BotSchedule {
   sendIntervalMinutes: number | null;
   sendWindowStart:     string | null;
   sendWindowEnd:       string | null;
-  notifType:         string;
-  deepLink:          string | null;
+  // smart targeting
+  conditionKind:      string;           // 'none' | 'team_hours_below_target' | 'team_has_overdue'
+  conditionParams:    Record<string, any>;
+  lastRun:            string | null;  // ISO timestamp of most recent run
   createdAt:         string;
   updatedAt:         string;
 }
@@ -57,6 +59,9 @@ function rowToSchedule(r: any): BotSchedule {
     sendIntervalMinutes: r.send_interval_minutes != null ? Number(r.send_interval_minutes) : null,
     sendWindowStart:     r.send_window_start ? String(r.send_window_start).slice(0, 5) : null,
     sendWindowEnd:       r.send_window_end ? String(r.send_window_end).slice(0, 5) : null,
+    conditionKind:      String(r.condition_kind ?? "none"),
+    conditionParams:    r.condition_params ?? {},
+    lastRun:            r.last_run ? new Date(String(r.last_run) + "+07:00").toISOString() : null,
     createdAt:        r.created_at ? new Date(r.created_at).toISOString() : "",
     updatedAt:        r.updated_at ? new Date(r.updated_at).toISOString() : "",
   };
@@ -73,6 +78,12 @@ const COLS = `
   send_interval_minutes,
   send_window_start::text AS send_window_start,
   send_window_end::text AS send_window_end,
+  condition_kind,
+  condition_params,
+  (SELECT run_date::text || 'T' || LPAD(run_hour::text,2,'0') || ':00:00'
+   FROM bot_schedule_runs r
+   WHERE r.schedule_id = bot_schedules.id
+   ORDER BY r.run_date DESC, r.run_hour DESC LIMIT 1) AS last_run,
   created_at, updated_at
 `;
 
@@ -148,6 +159,8 @@ export const botScheduleRepository = {
     }
     if (input.sendWindowStart !== undefined)  { cols.push("send_window_start"); vals.push(input.sendWindowStart ? `'${input.sendWindowStart}'::time` : "NULL"); }
     if (input.sendWindowEnd !== undefined)    { cols.push("send_window_end");   vals.push(input.sendWindowEnd ? `'${input.sendWindowEnd}'::time` : "NULL"); }
+    if (input.conditionKind !== undefined)   { cols.push("condition_kind");   vals.push(`'${input.conditionKind || "none"}'`); }
+    if (input.conditionParams !== undefined) { cols.push("condition_params"); vals.push(`'${JSON.stringify(input.conditionParams || {}).replace(/'/g, "''")}'::jsonb`); }
     if (createdBy)                           { cols.push("created_by");      vals.push(`'${createdBy}'::uuid`); }
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
@@ -186,6 +199,8 @@ export const botScheduleRepository = {
     if (input.sendIntervalMinutes !== undefined) sets.push(input.sendIntervalMinutes != null ? `send_interval_minutes = ${input.sendIntervalMinutes}` : "send_interval_minutes = NULL");
     if (input.sendWindowStart !== undefined)     sets.push(input.sendWindowStart ? `send_window_start = '${input.sendWindowStart}'::time` : "send_window_start = NULL");
     if (input.sendWindowEnd !== undefined)       sets.push(input.sendWindowEnd ? `send_window_end = '${input.sendWindowEnd}'::time` : "send_window_end = NULL");
+    if (input.conditionKind !== undefined)        sets.push(`condition_kind = '${input.conditionKind || "none"}'`);
+    if (input.conditionParams !== undefined)      sets.push(`condition_params = '${JSON.stringify(input.conditionParams || {}).replace(/'/g, "''")}'::jsonb`);
 
     const rows = await db.execute<Record<string, unknown>>(sql.raw(`
       UPDATE bot_schedules SET ${sets.join(", ")} WHERE id = '${id}'::uuid
@@ -225,6 +240,20 @@ export const botScheduleRepository = {
           ids.add(String(r.id));
         }
       }
+      return Array.from(ids);
+    }
+    if (s.audienceType === "managers_and_admins") {
+      const ids = new Set<string>();
+      const adminRows = await db.execute<{ id: string }>(sql.raw(`
+        SELECT e.id::text FROM employees e JOIN roles r ON e.role_id = r.id
+        WHERE e.is_active = true AND r.name = 'admin'
+      `));
+      for (const r of ((adminRows as any).rows ?? adminRows) as Array<{ id: string }>) ids.add(String(r.id));
+      const mgrRows = await db.execute<{ id: string }>(sql.raw(`
+        SELECT e.id::text FROM employees e JOIN roles r ON e.role_id = r.id
+        WHERE e.is_active = true AND r.name = 'manager'
+      `));
+      for (const r of ((mgrRows as any).rows ?? mgrRows) as Array<{ id: string }>) ids.add(String(r.id));
       return Array.from(ids);
     }
     // 'all'
